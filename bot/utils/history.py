@@ -52,7 +52,7 @@ async def get_chat_history():
     # Retrieve the values from the config file.
     api_id = config["Telegram"]["api_id"]
     api_hash = config["Telegram"]["api_hash"]
-    chat_id = int(config["Telegram"]["ITUS"])
+    chat_id = int(config["Telegram"]["chat_id"])
     phone = config["Telegram"]["phone_number"]
     
     client = TelegramClient(phone, api_id, api_hash)
