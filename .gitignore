@@ -4,3 +4,4 @@ bot/utils/config.ini
 *.pyc
 *.session
 .vscode/settings.json
+.DS_Store

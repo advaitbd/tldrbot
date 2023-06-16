@@ -1,9 +1,13 @@
 import openai
 import configparser
+import os 
+
+current_dir = os.path.dirname(os.path.abspath(__file__))
+config_file_path = os.path.join(current_dir, "config.ini")
 
 # Set API key
 config = configparser.ConfigParser()
-config.read("config.ini")
+config.read(config_file_path)
 openai.api_key = config["OpenAI"]["api_key"]
 
 def get_summary(result):

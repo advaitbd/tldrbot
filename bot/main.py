@@ -3,7 +3,9 @@ from uuid import uuid4
 from telegram import __version__ as TG_VER
 from telegram import Update, InlineQueryResultArticle, InputTextMessageContent
 from telegram.ext import Application, CommandHandler, MessageHandler, InlineQueryHandler, filters
-
+from utils.history import get_chat_history
+# from utils.gpt_summarizer import get_summary
+from utils.davinci_summarizer import get_summary
 import os 
 
 # Tokens
@@ -28,23 +30,13 @@ async def help_command(update: Update, context):
 
 async def summarize_command(update: Update, context):
     """Summarize the conversation."""
+    logger.info("Summarizing conversation...")
     chat_id = update.effective_chat.id
-    # Retrieve the messages in the group chat within a specific time range
-    # Here, you can use the update.message or update.effective_chat to access necessary information
-    start_date = ...  # Specify the start date for the conversation summary
-    end_date = ...  # Specify the end date for the conversation summary
-    # Query the messages within the given time range
-    # messages = context.bot.get_chat_history(chat_id, start_date, end_date
-    messages = "Blablabla"
-    # Process the messages and generate the summary
-    summary = generate_summary(messages)
+    result = await get_chat_history(chat_id)
+    summary = get_summary(result)
     # Send the summary as a message in the chat
     await context.bot.send_message(chat_id=chat_id, text=summary)
 
-def generate_summary(messages):
-    # Your code for generating the summary based on the retrieved messages goes here
-    # Return the generated summary
-    return "This is a summary of the conversation."
 
 async def inline_query(update: Update, context):
     """Handle inline queries."""
