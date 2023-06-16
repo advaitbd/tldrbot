@@ -52,7 +52,7 @@ async def get_chat_history():
     # Retrieve the values from the config file.
     api_id = config["Telegram"]["api_id"]
     api_hash = config["Telegram"]["api_hash"]
-    chat_id = int(config["Telegram"]["chat_id"])
+    chat_id = int(config["Telegram"]["ITUS"])
     phone = config["Telegram"]["phone_number"]
     
     client = TelegramClient(phone, api_id, api_hash)
@@ -70,17 +70,9 @@ async def get_chat_history():
     # Print out the chat history.
     censored_result.reverse()
 
-    for message in censored_result:
-        print(message)
-
     # Print out the number of words in the chat history.
     print(f"Number of words: {count_words(censored_result)}")
 
     await client.disconnect()
 
     return '\n'.join(censored_result)
-
-# Run the asynchronous function.
-import asyncio
-
-asyncio.run(get_chat_history())
