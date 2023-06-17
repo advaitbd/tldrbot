@@ -1,5 +1,6 @@
 import logging
 from uuid import uuid4
+from datetime import datetime
 from telegram import __version__ as TG_VER
 from telegram import Update, InlineQueryResultArticle, InputTextMessageContent
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, InlineQueryHandler, filters
@@ -13,6 +14,7 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN")
 PORT = int(os.environ.get("PORT", "5000"))
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
 CALL_COUNT = 0
+LAST_RESET_DATE = datetime.now().date()  # Track the last reset date
 
 # Enable logging
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
@@ -31,7 +33,14 @@ async def help_command(update: Update, context):
 
 async def summarize_command(update: Update, context):
     """Summarize the conversation."""
-    global CALL_COUNT
+    global CALL_COUNT, LAST_RESET_DATE
+    current_date = datetime.now().date()
+
+    if LAST_RESET_DATE != current_date:
+        # Reset the CALL_COUNT if the dates are different
+        LAST_RESET_DATE = current_date
+        CALL_COUNT = 0
+
     CALL_COUNT += 1
 
     if CALL_COUNT > 15:
