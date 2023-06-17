@@ -8,10 +8,10 @@ from utils.gpt_summarizer import get_summary
 # from utils.davinci_summarizer import get_summary
 import os 
 
-# Tokens
+# Env variables
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-print(BOT_TOKEN)
-
+PORT = int(os.environ.get("PORT", "5000"))
+WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
 
 # Enable logging
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
@@ -94,8 +94,16 @@ def main():
     # Register inline query handler
     application.add_handler(InlineQueryHandler(inline_query))
 
-    # Run the bot
-    application.run_polling()
+    if WEBHOOK_URL:
+        application.run_webhook(listen="0.0.0.0",
+                            port=int(PORT),
+                            url_path=BOT_TOKEN,
+                            webhook_url=os.getenv("WEBHOOK_URL") + BOT_TOKEN)
+        logger.info("Application running via webhook: ", BOT_TOKEN)
+
+    else:
+        application.run_polling()
+        logger.info("Application running via polling: ", BOT_TOKEN)
 
 
 if __name__ == "__main__":
