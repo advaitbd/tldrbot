@@ -13,6 +13,10 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN")
 PORT = int(os.environ.get("PORT", "5000"))
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
 
+# Global variables
+global CALL_COUNT
+CALL_COUNT = 0
+
 # Enable logging
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -30,11 +34,17 @@ async def help_command(update: Update, context):
 
 async def summarize_command(update: Update, context):
     """Summarize the conversation."""
+    CALL_COUNT += 1
+
+    if CALL_COUNT > 15:
+        await update.message.reply_text("You have exceeded the maximum number of calls. Please try again later.")
+        return
+
     logger.info("Summarizing conversation...")
     chat_id = update.effective_chat.id
     result = await get_chat_history(chat_id)
     summary = get_summary(result)
-    # Send the summary as a message in the chat
+
     await context.bot.send_message(chat_id=chat_id, text=summary)
 
 
