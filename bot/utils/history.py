@@ -1,10 +1,11 @@
-import configparser
 from telethon.sync import TelegramClient
 from telethon.sessions import StringSession
 import os
 
-current_dir = os.path.dirname(os.path.abspath(__file__))
-config_file_path = os.path.join(current_dir, "config.ini")
+# current_dir = os.path.dirname(os.path.abspath(__file__))
+# config_file_path = os.path.join(current_dir, "config.ini")
+TELEGRAM_API_ID = os.environ.get("TELEGRAM_API_ID")
+TELEGRAM_API_HASH = os.environ.get("TELEGRAM_API_HASH")
 CENSOR = os.environ.get("CENSOR")
 STRING = os.environ.get("STRING")
 
@@ -61,17 +62,17 @@ def censor_result(result, words_to_censor):
 
 async def get_chat_history(chat_id):
     # Read the Telegram API credentials from a config file.
-    config = configparser.ConfigParser()
-    config.read(config_file_path)
+    # config = configparser.ConfigParser()
+    # config.read(config_file_path)
 
-    # Retrieve the values from the config file.
-    api_id = config["Telegram"]["api_id"]
-    api_hash = config["Telegram"]["api_hash"]
+    # # Retrieve the values from the config file.
+    # api_id = config["Telegram"]["api_id"]
+    # api_hash = config["Telegram"]["api_hash"]
     # chat_id = int(config["Telegram"]["ITUS"])
     # phone = config["Telegram"]["phone_number"]
 
     # client = TelegramClient(phone, api_id, api_hash)
-    client = TelegramClient(StringSession(STRING), api_id, api_hash)
+    client = TelegramClient(StringSession(STRING), TELEGRAM_API_ID, TELEGRAM_API_HASH)
 
     # Start the client.
     await client.start()
