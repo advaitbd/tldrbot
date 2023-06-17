@@ -80,14 +80,6 @@ def main():
 
     application = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    # Check the PTB version compatibility
-    if TG_VER < "20.0.0":
-        raise RuntimeError(
-            f"This example is not compatible with your current PTB version {TG_VER}. "
-            "To view the latest example, visit "
-            "https://docs.python-telegram-bot.org/en/stable/examples.html"
-        )
-
     # Register command handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
