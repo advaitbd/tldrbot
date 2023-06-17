@@ -12,7 +12,7 @@ import os
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 PORT = int(os.environ.get("PORT", "5000"))
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
-
+CALL_COUNT = 0
 
 # Enable logging
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
@@ -31,6 +31,7 @@ async def help_command(update: Update, context):
 
 async def summarize_command(update: Update, context):
     """Summarize the conversation."""
+    global CALL_COUNT
     CALL_COUNT += 1
 
     if CALL_COUNT > 15:
@@ -84,10 +85,6 @@ def main():
     """Start the bot."""
     # Create the Application and pass it your bot's token.
     # application = Application.builder().token(BOT_TOKEN).build()
-
-    # Global variables
-    global CALL_COUNT
-    CALL_COUNT = 0
 
     application = ApplicationBuilder().token(BOT_TOKEN).build()
 
