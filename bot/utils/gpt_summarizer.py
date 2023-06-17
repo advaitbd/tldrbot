@@ -18,12 +18,6 @@ def get_summary(result):
     generated = openai.ChatCompletion.create(
         model="gpt-3.5-turbo",
         messages=[{"role": "user", "content": f"{prompt}"}])
-    
-    # # Extract summary text from response 
-    # summary = generated.choices[0].text.strip()
-
-    # # Parse and format summary as needed 
-    # parsed_summary = json.loads(summary)
 
     # Output summary to console 
     return generated["choices"][0]["message"]["content"]

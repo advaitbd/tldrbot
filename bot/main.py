@@ -4,8 +4,8 @@ from telegram import __version__ as TG_VER
 from telegram import Update, InlineQueryResultArticle, InputTextMessageContent
 from telegram.ext import Application, CommandHandler, MessageHandler, InlineQueryHandler, filters
 from utils.history import get_chat_history
-# from utils.gpt_summarizer import get_summary
-from utils.davinci_summarizer import get_summary
+from utils.gpt_summarizer import get_summary
+# from utils.davinci_summarizer import get_summary
 import os 
 
 # Tokens
@@ -53,7 +53,7 @@ async def inline_query(update: Update, context):
         InlineQueryResultArticle(
             id=str(uuid4()),
             title="Summarize Conversation",
-            input_message_content=InputTextMessageContent(f"/summarize"),
+            input_message_content=InputTextMessageContent(f"/tldr"),
             description="Summarize the conversation in the group chat",
         ),
         # Add more inline query results for other commands
@@ -89,7 +89,7 @@ def main():
     # Register command handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("summarize", summarize_command))
+    application.add_handler(CommandHandler("tldr", summarize_command))
 
     # Register inline query handler
     application.add_handler(InlineQueryHandler(inline_query))

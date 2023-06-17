@@ -11,7 +11,7 @@ chat_id = int(config["Telegram"]["ITUS"])
 
 async def main():
     result = await get_chat_history(chat_id)
-
+    print(result)
     # Prompt User for Model
     model = input("Which model would you like to use? (gpt, bert, davinci): ")
 
