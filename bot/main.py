@@ -2,7 +2,7 @@ import logging
 from uuid import uuid4
 from telegram import __version__ as TG_VER
 from telegram import Update, InlineQueryResultArticle, InputTextMessageContent
-from telegram.ext import Application, CommandHandler, MessageHandler, InlineQueryHandler, filters
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, InlineQueryHandler, filters
 from utils.history import get_chat_history
 from utils.gpt_summarizer import get_summary
 # from utils.davinci_summarizer import get_summary
@@ -76,7 +76,9 @@ async def inline_query(update: Update, context):
 def main():
     """Start the bot."""
     # Create the Application and pass it your bot's token.
-    application = Application.builder().token(BOT_TOKEN).build()
+    # application = Application.builder().token(BOT_TOKEN).build()
+
+    application = ApplicationBuilder().token(BOT_TOKEN).build()
 
     # Check the PTB version compatibility
     if TG_VER < "20.0.0":
@@ -95,6 +97,7 @@ def main():
     application.add_handler(InlineQueryHandler(inline_query))
 
     if WEBHOOK_URL:
+        
         application.run_webhook(listen="0.0.0.0",
                             port=int(PORT),
                             url_path=BOT_TOKEN,
