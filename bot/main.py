@@ -99,11 +99,11 @@ def main():
                             port=int(PORT),
                             url_path=BOT_TOKEN,
                             webhook_url=os.getenv("WEBHOOK_URL") + BOT_TOKEN)
-        logger.info("Application running via webhook: ", BOT_TOKEN)
+        logger.info("Application running via webhook: ")
 
     else:
         application.run_polling()
-        logger.info("Application running via polling: ", BOT_TOKEN)
+        logger.info("Application running via polling: ")
 
 
 if __name__ == "__main__":
