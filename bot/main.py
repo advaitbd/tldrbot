@@ -52,6 +52,11 @@ async def summarize_command(update: Update, context):
     result = await get_chat_history(chat_id)
     summary = get_summary(result)
 
+    # Append a counter to the summary of the number of times it has been called out of 15 today
+    # e.g. "....(1/15)"
+
+    summary += f"\n\n({CALL_COUNT}/15)"
+
     await context.bot.send_message(chat_id=chat_id, text=summary)
 
 
