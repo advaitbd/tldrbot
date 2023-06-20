@@ -12,7 +12,11 @@ openai.api_key = os.environ.get("OPENAI_API_KEY")
 
 def get_summary(result):
     # Define prompt 
-    prompt = "Summarise this group chat that occurred on Telegram, making references to who said what " + result
+    prompt = result + '''Based on the above, output the following
+
+                        "Summary: [4-5 Sentences]
+
+                        Sentiment: [Choose between, Positive, Negative, Neutral]"'''
 
     # Call API and receive response 
     generated = openai.ChatCompletion.create(

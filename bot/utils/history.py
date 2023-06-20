@@ -16,7 +16,7 @@ def filter_bot_messages(result):
     filtered_result = []
 
     for message in result:
-        if message.startswith("test_bot:"):
+        if message.startswith("tldrbot:"):
             continue
         else:
             filtered_result.append(message)

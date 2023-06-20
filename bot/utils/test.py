@@ -4,9 +4,12 @@ import bert_summarizer
 import davinci_summarizer
 import asyncio
 import configparser
+import os
 
 config = configparser.ConfigParser()
-config.read("config.ini")
+current_dir = os.path.dirname(os.path.abspath(__file__))
+config_file_path = os.path.join(current_dir, "config.ini")
+config.read(config_file_path)
 chat_id = int(config["Telegram"]["ITUS"])
 
 async def main():
@@ -25,4 +28,5 @@ async def main():
     print(summary)
 
 if __name__ == "__main__":
+
     asyncio.run(main())
