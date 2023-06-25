@@ -6,7 +6,6 @@ from telegram import Update, InlineQueryResultArticle, InputTextMessageContent
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, InlineQueryHandler, filters
 from utils.history import get_chat_history
 from utils.gpt_summarizer import get_summary
-# from utils.davinci_summarizer import get_summary
 import os 
 
 # Env variables
@@ -51,9 +50,6 @@ async def summarize_command(update: Update, context):
     chat_id = update.effective_chat.id
     result = await get_chat_history(chat_id)
     summary = get_summary(result)
-
-    # Append a counter to the summary of the number of times it has been called out of 15 today
-    # e.g. "....(1/15)"
 
     summary += f"\n\n({CALL_COUNT}/15)"
 

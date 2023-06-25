@@ -4,12 +4,12 @@ import asyncio
 
 API_ID = 0
 API_HASH = ""
-STRING = ""
-client = TelegramClient(StringSession(STRING), API_ID, API_HASH)
+TELEGRAM_BOT_TOKEN = ""
+client = TelegramClient("Test", API_ID, API_HASH)
 
 async def get_code():
     await client.connect()
-    phone = "PHONE_NUMBER"
+    phone = input("Enter phone number: ")
     # This will send the code to the user. You have to get it using the front end
     phone_code = await client.send_code_request(phone)
     phone_code_hash = phone_code.phone_code_hash
