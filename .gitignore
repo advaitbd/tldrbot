@@ -5,3 +5,4 @@ bot/utils/config.ini
 *.session
 .vscode/settings.json
 .DS_Store
+.env

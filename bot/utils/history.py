@@ -60,7 +60,7 @@ def censor_result(result, words_to_censor):
     return redacted_result
 
 
-async def get_chat_history(chat_id):
+async def get_chat_history(chat_id, num_messages):
     # Read the Telegram API credentials from a config file.
     # config = configparser.ConfigParser()
     # config.read(config_file_path)
@@ -78,7 +78,7 @@ async def get_chat_history(chat_id):
     await client.start()
 
     # Get the chat history of the group chat.
-    messages = await client.get_messages(chat_id, limit=100)
+    messages = await client.get_messages(chat_id, limit=num_messages)
     
     # Format according to sender's name and message content.
     result = [f"{message.sender.first_name}: {message.message} \n" for message in messages if not message.action]
@@ -89,6 +89,8 @@ async def get_chat_history(chat_id):
 
     # Print out the chat history.
     filtered_result.reverse()
+    
+    # print('\n'.join(filtered_result))
 
     # Print out the number of words in the chat history.
     print(f"Number of words: {count_words(filtered_result)}")

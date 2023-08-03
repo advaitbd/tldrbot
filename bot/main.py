@@ -14,6 +14,8 @@ PORT = int(os.environ.get("PORT", "5000"))
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
 CALL_COUNT = 0
 LAST_RESET_DATE = datetime.now().date()  # Track the last reset date
+# Global variable to store the message counts per user
+USER_MESSAGE_COUNTS = {}
 
 # Enable logging
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
@@ -30,9 +32,11 @@ async def help_command(update: Update, context):
     """Send a message when the command /help is issued."""
     await update.message.reply_text("Help!")
 
+
+
 async def summarize_command(update: Update, context):
     """Summarize the conversation."""
-    global CALL_COUNT, LAST_RESET_DATE
+    global CALL_COUNT, LAST_RESET_DATE, USER_MESSAGE_COUNTS
     current_date = datetime.now().date()
 
     if LAST_RESET_DATE != current_date:
@@ -42,18 +46,55 @@ async def summarize_command(update: Update, context):
 
     CALL_COUNT += 1
 
-    if CALL_COUNT > 15:
+    if CALL_COUNT > 20:
         await update.message.reply_text("You have exceeded the maximum number of calls. Please try again later.")
         return
 
     logger.info("Summarizing conversation...")
     chat_id = update.effective_chat.id
-    result = await get_chat_history(chat_id)
-    summary = get_summary(result)
 
-    summary += f"\n\n({CALL_COUNT}/15)"
+    num_messages = 50  # default value
+    if context.args:
+        try:
+            num_messages = int(context.args[0])
+            if num_messages < 1:
+                num_messages = 50
+        except ValueError:
+            await update.message.reply_text("Invalid number of messages. Please provide a valid number.")
+    
+    # Get user ID and check if it's in the dictionary
+    user_id = update.effective_user.id
 
-    await context.bot.send_message(chat_id=chat_id, text=summary)
+    if user_id in USER_MESSAGE_COUNTS:
+        # If they're at or exceed the limit, don't continue
+        if USER_MESSAGE_COUNTS[user_id] + num_messages > 500:
+            remaining = 500 - USER_MESSAGE_COUNTS[user_id]
+            await context.bot.send_message(
+              chat_id=chat_id,
+              text=f"You only have {remaining} messages left to summarize.",
+            )
+            return
+        else:
+            USER_MESSAGE_COUNTS[user_id] += num_messages
+    else:
+        USER_MESSAGE_COUNTS[user_id] = num_messages
+
+    
+
+    result = await get_chat_history(chat_id, num_messages)
+
+    caller_info = update.effective_user
+    logger.info(f"Conversation summarized by {caller_info.name} ({caller_info.id})")
+
+    prefix = f"_Conversation summarized by {caller_info.name} for last {num_messages} messages:_\n\n"
+    postfix = f"\n\n\({CALL_COUNT}/15\) \n\n[made with ❤️ by crustyapples](https://advaitdeshpande.com/)"
+    
+    summary = prefix + get_summary(result) + postfix
+    summary = summary.replace(".", "\.")
+
+    print(summary)
+    print("user message counts",USER_MESSAGE_COUNTS)
+    await context.bot.send_message(chat_id=chat_id, text=summary, parse_mode="MarkdownV2", disable_web_page_preview=True)
 
 
 async def inline_query(update: Update, context):
