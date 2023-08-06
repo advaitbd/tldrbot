@@ -59,8 +59,12 @@ async def summarize_command(update: Update, context):
             num_messages = int(context.args[0])
             if num_messages < 1:
                 num_messages = 50
+            if num_messages >= 400:
+                await update.message.reply_text("Too many messages. Please provide a number less than 400.")
+                return
         except ValueError:
             await update.message.reply_text("Invalid number of messages. Please provide a valid number.")
+            return
     
     # Get user ID and check if it's in the dictionary
     user_id = update.effective_user.id
@@ -80,8 +84,13 @@ async def summarize_command(update: Update, context):
         USER_MESSAGE_COUNTS[user_id] = num_messages
 
     
+    try:
+        result = await get_chat_history(chat_id, num_messages)
 
-    result = await get_chat_history(chat_id, num_messages)
+    except Exception as e:
+        logger.error(e)
+        await context.bot.send_message(chat_id=chat_id, text="An error occurred. Please try reducing number of messages.")
+        return
 
     caller_info = update.effective_user
     logger.info(f"Conversation summarized by {caller_info.name} ({caller_info.id})")
@@ -92,6 +101,7 @@ async def summarize_command(update: Update, context):
     
     summary = prefix + get_summary(result) + postfix
     summary = summary.replace(".", "\.")
+    summary = summary.replace("-", "\-")
 
     print(summary)
     print("user message counts",USER_MESSAGE_COUNTS)
