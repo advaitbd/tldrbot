@@ -86,7 +86,6 @@ async def summarize_command(update: Update, context):
     
     try:
         result = await get_chat_history(chat_id, num_messages)
-
     except Exception as e:
         logger.error(e)
         await context.bot.send_message(chat_id=chat_id, text="An error occurred. Please try reducing number of messages.")
@@ -102,6 +101,8 @@ async def summarize_command(update: Update, context):
     summary = prefix + get_summary(result) + postfix
     summary = summary.replace(".", "\.")
     summary = summary.replace("-", "\-")
+    summary = summary.replace("(", "\(")
+    summary = summary.replace(")", "\)")
 
     print(summary)
     print("user message counts",USER_MESSAGE_COUNTS)
