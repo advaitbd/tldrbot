@@ -95,7 +95,7 @@ async def summarize_command(update: Update, context):
     logger.info(f"Conversation summarized by {caller_info.name} ({caller_info.id})")
 
     prefix = f"_Conversation summarized by {caller_info.name} for last {num_messages} messages:_\n\n"
-    postfix = f"\n\n\({CALL_COUNT}/20\)"
+    postfix = f"\n\n({CALL_COUNT}/20)"
     # postfix = f"\n\n\({CALL_COUNT}/15\) \n\n[made with ❤️ by crustyapples](https://advaitdeshpande.com/)"
     
     summary = prefix + get_summary(result) + postfix
