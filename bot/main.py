@@ -141,6 +141,7 @@ async def inline_query(update: Update, context):
             description="Display help information",
         ),
     ]
+    
 
     await update.inline_query.answer(results)
 
