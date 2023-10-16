@@ -40,8 +40,9 @@ async def summarize_command(update: Update, context):
     current_date = datetime.now().date()
 
     if LAST_RESET_DATE != current_date:
-        # Reset the CALL_COUNT if the dates are different
+        # Reset the CALL_COUNT and USER_COUNT if the dates are different
         LAST_RESET_DATE = current_date
+        USER_MESSAGE_COUNTS = {}
         CALL_COUNT = 0
 
     CALL_COUNT += 1
