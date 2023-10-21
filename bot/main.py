@@ -29,7 +29,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-
 async def start(update: Update, context):
     """Send a message when the command /start is issued."""
     user = update.effective_user
