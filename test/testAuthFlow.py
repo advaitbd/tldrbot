@@ -7,6 +7,7 @@ API_HASH = ""
 TELEGRAM_BOT_TOKEN = ""
 client = TelegramClient("Test", API_ID, API_HASH)
 
+
 async def get_code():
     await client.connect()
     phone = input("Enter phone number: ")
@@ -16,7 +17,8 @@ async def get_code():
 
     return phone_code_hash, phone
 
-async def login(phone,phone_code_hash, code):
+
+async def login(phone, phone_code_hash, code):
     try:
         await client.sign_in(phone, code=code, phone_code_hash=phone_code_hash)
     except Exception as e:
@@ -32,7 +34,11 @@ async def main():
     await login(phone, phone_code_hash, code)
 
     messages = await client.get_messages(-885033485, limit=100)
-    result = [f"{message.sender.first_name}: {message.message} \n" for message in messages if not message.action]
+    result = [
+        f"{message.sender.first_name}: {message.message} \n"
+        for message in messages
+        if not message.action
+    ]
     print(result)
 
 

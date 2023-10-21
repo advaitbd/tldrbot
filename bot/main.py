@@ -1,12 +1,17 @@
 import logging
 from uuid import uuid4
 from datetime import datetime
-from telegram import __version__ as TG_VER
 from telegram import Update, InlineQueryResultArticle, InputTextMessageContent
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, InlineQueryHandler, filters
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    MessageHandler,
+    InlineQueryHandler,
+    filters,
+)
 from utils.history import get_chat_history
 from utils.gpt_summarizer import get_summary
-import os 
+import os
 
 # Env variables
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
@@ -14,12 +19,16 @@ PORT = int(os.environ.get("PORT", "5000"))
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
 CALL_COUNT = 0
 LAST_RESET_DATE = datetime.now().date()  # Track the last reset date
+LAST_MESSAGE_DATE = None  # This will store the date of the last processed message
 # Global variable to store the message counts per user
 USER_MESSAGE_COUNTS = {}
 
 # Enable logging
-logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
+)
 logger = logging.getLogger(__name__)
+
 
 async def start(update: Update, context):
     """Send a message when the command /start is issued."""
@@ -28,27 +37,35 @@ async def start(update: Update, context):
         rf"Hi {user.mention_html()}! I'm a group chat summarizer bot.",
     )
 
+
 async def help_command(update: Update, context):
     """Send a message when the command /help is issued."""
     await update.message.reply_text("Help!")
 
 
-
 async def summarize_command(update: Update, context):
     """Summarize the conversation."""
-    global CALL_COUNT, LAST_RESET_DATE, USER_MESSAGE_COUNTS
-    current_date = datetime.now().date()
+    global CALL_COUNT, LAST_RESET_DATE, USER_MESSAGE_COUNTS, LAST_MESSAGE_DATE
+    message_date = update.message.date.date()  # Get the date of the current message
 
-    if LAST_RESET_DATE != current_date:
-        # Reset the CALL_COUNT and USER_COUNT if the dates are different
-        LAST_RESET_DATE = current_date
+    # Check if this is the first message the bot is processing since it started
+    if LAST_MESSAGE_DATE is None:
+        LAST_MESSAGE_DATE = message_date
+
+    # If the date of the current message is different from the LAST_MESSAGE_DATE, it means a new day has started since the bot last processed a message
+    if LAST_MESSAGE_DATE != message_date:
+        logger.info("New day detected based on message date. Resetting counts.")
+        LAST_RESET_DATE = message_date
+        LAST_MESSAGE_DATE = message_date
         USER_MESSAGE_COUNTS = {}
         CALL_COUNT = 0
 
     CALL_COUNT += 1
 
     if CALL_COUNT > 20:
-        await update.message.reply_text("You have exceeded the maximum number of calls. Please try again later.")
+        await update.message.reply_text(
+            "You have exceeded the maximum number of calls. Please try again later."
+        )
         return
 
     logger.info("Summarizing conversation...")
@@ -61,12 +78,16 @@ async def summarize_command(update: Update, context):
             if num_messages < 1:
                 num_messages = 50
             if num_messages >= 400:
-                await update.message.reply_text("Too many messages. Please provide a number less than 400.")
+                await update.message.reply_text(
+                    "Too many messages. Please provide a number less than 400."
+                )
                 return
         except ValueError:
-            await update.message.reply_text("Invalid number of messages. Please provide a valid number.")
+            await update.message.reply_text(
+                "Invalid number of messages. Please provide a valid number."
+            )
             return
-    
+
     # Get user ID and check if it's in the dictionary
     user_id = update.effective_user.id
 
@@ -75,8 +96,8 @@ async def summarize_command(update: Update, context):
         if USER_MESSAGE_COUNTS[user_id] + num_messages > 500:
             remaining = 500 - USER_MESSAGE_COUNTS[user_id]
             await context.bot.send_message(
-              chat_id=chat_id,
-              text=f"You only have {remaining} messages left to summarize.",
+                chat_id=chat_id,
+                text=f"You only have {remaining} messages left to summarize.",
             )
             return
         else:
@@ -84,30 +105,34 @@ async def summarize_command(update: Update, context):
     else:
         USER_MESSAGE_COUNTS[user_id] = num_messages
 
-    
     try:
         result = await get_chat_history(chat_id, num_messages)
     except Exception as e:
         logger.error(e)
-        await context.bot.send_message(chat_id=chat_id, text="An error occurred. Please try reducing number of messages.")
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text="An error occurred. Please try reducing the number of messages.",
+        )
         return
 
     caller_info = update.effective_user
     logger.info(f"Conversation summarized by {caller_info.name} ({caller_info.id})")
 
-    prefix = f"_Conversation summarized by {caller_info.name} for last {num_messages} messages:_\n\n"
+    prefix = f"_Conversation summarized by {caller_info.name} for the last {num_messages} messages:_\n\n"
     postfix = f"\n\n({CALL_COUNT}/20)"
-    # postfix = f"\n\n\({CALL_COUNT}/15\) \n\n[made with ❤️ by crustyapples](https://advaitdeshpande.com/)"
-    
+
     summary = prefix + get_summary(result) + postfix
     summary = summary.replace(".", "\.")
     summary = summary.replace("-", "\-")
     summary = summary.replace("(", "\(")
     summary = summary.replace(")", "\)")
 
-    print(summary)
-    print("user message counts",USER_MESSAGE_COUNTS)
-    await context.bot.send_message(chat_id=chat_id, text=summary, parse_mode="MarkdownV2", disable_web_page_preview=True)
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=summary,
+        parse_mode="MarkdownV2",
+        disable_web_page_preview=True,
+    )
 
 
 async def inline_query(update: Update, context):
@@ -115,20 +140,11 @@ async def inline_query(update: Update, context):
     query = update.inline_query.query
     results = [
         InlineQueryResultArticle(
-            id="1",
-            title="Summarize Conversation",
-            input_message_content=InputTextMessageContent("/summarize"),
-        )
-    ]
-
-    results = [
-        InlineQueryResultArticle(
             id=str(uuid4()),
             title="Summarize Conversation",
             input_message_content=InputTextMessageContent(f"/tldr"),
             description="Summarize the conversation in the group chat",
         ),
-        # Add more inline query results for other commands
         InlineQueryResultArticle(
             id=str(uuid4()),
             title="Start",
@@ -142,15 +158,11 @@ async def inline_query(update: Update, context):
             description="Display help information",
         ),
     ]
-    
-
     await update.inline_query.answer(results)
+
 
 def main():
     """Start the bot."""
-    # Create the Application and pass it your bot's token.
-    # application = Application.builder().token(BOT_TOKEN).build()
-
     application = ApplicationBuilder().token(BOT_TOKEN).build()
 
     # Register command handlers
@@ -162,13 +174,13 @@ def main():
     application.add_handler(InlineQueryHandler(inline_query))
 
     if WEBHOOK_URL:
-        
-        application.run_webhook(listen="0.0.0.0",
-                            port=int(PORT),
-                            url_path=BOT_TOKEN,
-                            webhook_url=os.getenv("WEBHOOK_URL") + BOT_TOKEN)
+        application.run_webhook(
+            listen="0.0.0.0",
+            port=int(PORT),
+            url_path=BOT_TOKEN,
+            webhook_url=os.getenv("WEBHOOK_URL") + BOT_TOKEN,
+        )
         logger.info("Application running via webhook: ")
-
     else:
         application.run_polling()
         logger.info("Application running via polling: ")

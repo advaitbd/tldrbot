@@ -12,6 +12,7 @@ config_file_path = os.path.join(current_dir, "config.ini")
 config.read(config_file_path)
 chat_id = int(config["Telegram"]["ITUS"])
 
+
 async def main():
     result = await get_chat_history(chat_id)
     print(result)
@@ -26,6 +27,7 @@ async def main():
         summary = davinci_summarizer.get_summary(result)
 
     print(summary)
+
 
 if __name__ == "__main__":
 
