@@ -24,7 +24,7 @@ def get_summary(result):
 
     # Call API and receive response
     generated = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo", messages=[{"role": "user", "content": f"{prompt}"}]
+        model="gpt-4o", messages=[{"role": "user", "content": f"{prompt}"}]
     )
 
     # Output summary to console
