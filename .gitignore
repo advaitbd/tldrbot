@@ -1,4 +1,4 @@
-env
+.venv
 bot/utils/client.session
 bot/utils/config.ini
 *.pyc
@@ -6,3 +6,4 @@ bot/utils/config.ini
 .vscode/settings.json
 .DS_Store
 .env
+pyproject.toml
