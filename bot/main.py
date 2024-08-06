@@ -2,15 +2,9 @@ import logging
 from uuid import uuid4
 from datetime import datetime
 from telegram import Update, InlineQueryResultArticle, InputTextMessageContent
-from telegram.ext import (
-    ApplicationBuilder,
-    CommandHandler,
-    MessageHandler,
-    InlineQueryHandler,
-    filters,
-)
-from utils.history import get_chat_history
-from utils.gpt_summarizer import get_summary
+from telegram.ext import ApplicationBuilder, CommandHandler, InlineQueryHandler
+from src import get_chat_history, count_words
+from gpt_summarizer import get_summary
 import os
 
 # Env variables
@@ -24,7 +18,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-
 async def start(update: Update, context):
     """Send a message when the command /start is issued."""
     user = update.effective_user
@@ -32,11 +25,9 @@ async def start(update: Update, context):
         rf"Hi {user.mention_html()}! I'm a group chat summarizer bot.",
     )
 
-
 async def help_command(update: Update, context):
     """Send a message when the command /help is issued."""
     await update.message.reply_text("Help!")
-
 
 async def summarize_command(update: Update, context):
     """Summarize the conversation."""
@@ -89,7 +80,6 @@ async def summarize_command(update: Update, context):
         disable_web_page_preview=True,
     )
 
-
 async def inline_query(update: Update, context):
     """Handle inline queries."""
     query = update.inline_query.query
@@ -115,7 +105,6 @@ async def inline_query(update: Update, context):
     ]
     await update.inline_query.answer(results)
 
-
 def main():
     """Start the bot."""
     application = ApplicationBuilder().token(BOT_TOKEN).build()
@@ -139,7 +128,6 @@ def main():
     else:
         application.run_polling()
         logger.info("Application running via polling: ")
-
 
 if __name__ == "__main__":
     main()
