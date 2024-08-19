@@ -17,11 +17,11 @@ def get_summary(result):
         result
         + '''Based on the above, output the following
 
-                        "Summary: [4-5 Sentences]
+                        Summary: [4-5 Sentences]
 
                         Sentiment: [Choose between, Positive, Negative, Neutral]
 
-                        Events: [List Date, Time and Nature of any upcoming events if there are any]"'''
+                        Events: [List Date, Time and Nature of any upcoming events if there are any]'''
     )
 
     # Call API and receive response

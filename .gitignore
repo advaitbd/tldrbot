@@ -6,3 +6,5 @@ bot/utils/config.ini
 .vscode/settings.json
 .DS_Store
 .env
+.venv
+pyproject.toml
