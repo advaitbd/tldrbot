@@ -112,8 +112,9 @@ async def download_tiktok(update: Update, context):
 
     ydl_opts = {
         'format': 'best',
-        'outtmpl': '/tmp/%(title)s.%(ext)s',
+        'outtmpl': '/tmp/%(id)s.%(ext)s',
         'nocheckcertificate': True,
+        'trim_filenames': True,
         'extractor_args': {
             'tiktok': {
                 'api_hostname': 'api22-normal-c-useast2a.tiktokv.com'
@@ -124,13 +125,15 @@ async def download_tiktok(update: Update, context):
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info_dict = ydl.extract_info(url, download=True)
+
             video_file = ydl.prepare_filename(info_dict)
 
+        logger.info(f"Downloaded TikTok video: {video_file}")
         await context.bot.send_video(chat_id=chat_id, video=open(video_file, 'rb'))
         os.remove(video_file)
     except Exception as e:
         logger.error(e)
-        await update.message.reply_text("An error occurred while downloading the video.")
+        await update.message.reply_text("An error occurred while downloading the video:", e)
 
 async def inline_query(update: Update, context):
     """Handle inline queries."""
