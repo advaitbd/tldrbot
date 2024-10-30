@@ -1,6 +1,9 @@
 from telethon.sync import TelegramClient
 from telethon.sessions import StringSession
 import os
+# import dotenv
+
+# dotenv.load_dotenv()
 
 # current_dir = os.path.dirname(os.path.abspath(__file__))
 # config_file_path = os.path.join(current_dir, "config.ini")

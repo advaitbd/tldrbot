@@ -10,14 +10,19 @@ from telegram.ext import (
     filters,
 )
 from utils.history import get_chat_history
-from utils.gpt_summarizer import get_summary
+from utils.gpt_summarizer import get_summary, get_answer_from_gpt
 import os
 import yt_dlp
+import openai
 
 # Env variables
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 PORT = int(os.environ.get("PORT", "5000"))
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+
+# Set OpenAI API key
+openai.api_key = OPENAI_API_KEY
 
 # Enable logging
 logging.basicConfig(
@@ -90,12 +95,51 @@ async def summarize_command(update: Update, context):
     summary = summary.replace("(", "\\(")
     summary = summary.replace(")", "\\)")
 
-    await context.bot.send_message(
+    summary_message = await context.bot.send_message(
         chat_id=chat_id,
         text=summary,
         parse_mode="MarkdownV2",
         disable_web_page_preview=True,
     )
+
+    # Store the summary message ID and original messages in the context
+    context.chat_data['summary_message_id'] = summary_message.message_id
+    context.chat_data['original_messages'] = result
+
+async def handle_reply(update: Update, context):
+    """Handle replies to the summary message."""
+    chat_id = update.effective_chat.id if update.effective_chat else None
+    if chat_id is None:
+        logger.error("Chat ID is None")
+        return
+
+    logger.info("Received a reply message")
+
+    # Check if the message is a reply to the summary
+    if update.message.reply_to_message:
+        logger.info("Message is a reply to another message")
+        if update.message.reply_to_message.message_id == context.chat_data.get('summary_message_id'):
+            logger.info("Message is a reply to the summary message")
+            question = update.message.text
+            original_messages = context.chat_data.get('original_messages', [])
+
+            # Generate an answer using GPT
+            answer = get_answer_from_gpt(original_messages, question)
+            answer = answer.replace(".", "\\.")
+            answer = answer.replace("-", "\\-")
+            answer = answer.replace("(", "\\(")
+            answer = answer.replace(")", "\\)")
+
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=answer,
+                parse_mode="MarkdownV2",
+                disable_web_page_preview=True,
+            )
+        else:
+            logger.info("Message is not a reply to the summary message")
+    else:
+        logger.info("Message is not a reply to any message")
 
 async def download_tiktok(update: Update, context):
     """Download TikTok video."""
@@ -172,6 +216,9 @@ def main():
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("tldr", summarize_command))
     application.add_handler(CommandHandler("dl", download_tiktok))
+
+    # Register message handler for replies
+    application.add_handler(MessageHandler(filters.REPLY, handle_reply))
 
     # Register inline query handler
     application.add_handler(InlineQueryHandler(inline_query))
