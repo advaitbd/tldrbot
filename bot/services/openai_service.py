@@ -5,6 +5,8 @@ from config.settings import OpenAIConfig
 class OpenAIService:
     def __init__(self):
         openai.api_key = OpenAIConfig.API_KEY
+        self.model = OpenAIConfig.MODEL
+
 
     def get_summary(self, text: str) -> str:
         prompt = self._create_summary_prompt(text)
@@ -17,7 +19,7 @@ class OpenAIService:
     def _get_completion(self, prompt: str) -> str:
         try:
             response = openai.ChatCompletion.create(
-                model="gpt-4o-mini",
+                model=self.model,
                 messages=[{"role": "user", "content": prompt}]
             )
             return response["choices"][0]["message"]["content"]

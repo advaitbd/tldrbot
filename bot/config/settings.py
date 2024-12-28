@@ -19,7 +19,7 @@ class TelegramConfig:
 @dataclass
 class OpenAIConfig:
     API_KEY: str = os.environ.get("OPENAI_API_KEY")
-    MODEL: str = os.environ.get("OPENAI_MODEL", "gpt-4")
+    MODEL: str = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
 
 @dataclass
 class CensorConfig:
