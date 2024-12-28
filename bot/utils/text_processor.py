@@ -2,7 +2,7 @@ class TextProcessor:
     @staticmethod
     def escape_markdown(text: str) -> str:
         """Escape markdown special characters."""
-        special_chars = ['*','[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+        special_chars = ['[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
         escaped_text = text
         for char in special_chars:
             escaped_text = escaped_text.replace(char, f"\\{char}")

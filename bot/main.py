@@ -6,6 +6,7 @@ from telegram.ext import (
     InlineQueryHandler,
     filters,
 )
+from utils.memory_storage import MemoryStorage
 from config.settings import TelegramConfig
 from handlers.command_handlers import CommandHandlers
 from handlers.message_handlers import MessageHandlers
@@ -20,9 +21,10 @@ logger = logging.getLogger(__name__)
 
 class Bot:
     def __init__(self):
-        self.command_handlers = CommandHandlers()
         self.message_handlers = MessageHandlers()
         self.telegram_service = TelegramService()
+        self.memory_storage = MemoryStorage(max_messages=400)
+        self.command_handlers = CommandHandlers(self.memory_storage)
 
     def setup(self):
         if not TelegramConfig.BOT_TOKEN:
@@ -44,12 +46,25 @@ class Bot:
 
         # Message handlers
         application.add_handler(MessageHandler(
-            filters.REPLY, 
+            filters.REPLY,
             self.message_handlers.handle_reply
         ))
 
         # Inline query handler
         application.add_handler(InlineQueryHandler(self.command_handlers.inline_query))
+
+        # Message storage handler
+        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self._store_in_memory))
+
+    async def _store_in_memory(self, update, context):
+        """
+        Handler to store messages in-memory
+        """
+
+        chat_id = update.effective_chat.id
+        sender_name = update.effective_user.name if update.effective_user else "Unknown"
+        message = update.message.text
+        self.memory_storage.store_message(chat_id, sender_name, message)
 
 def main():
     bot = Bot()

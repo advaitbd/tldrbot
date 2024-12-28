@@ -1,18 +1,19 @@
 from telegram import Update, InlineQueryResultArticle, InputTextMessageContent
 from uuid import uuid4
 from telegram.ext import ContextTypes
+from telethon.sessions import memory
+from utils.memory_storage import MemoryStorage
 from services.openai_service import OpenAIService
-from utils.chat_history import ChatHistoryManager
 from utils.text_processor import TextProcessor
 import logging
 
 logger = logging.getLogger(__name__)
 
 class CommandHandlers:
-    def __init__(self):
+    def __init__(self, memory_storage: MemoryStorage):
         self.openai_service = OpenAIService()
-        self.history_manager = ChatHistoryManager()
-    
+        self.memory_storage = memory_storage
+
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Hello! I'm TLDR Bot. How can I help you today?")
 
@@ -22,16 +23,18 @@ class CommandHandlers:
     async def summarize(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id = update.effective_chat.id
         num_messages = self._parse_message_count(context.args, default=50, max_limit=400)
-        
+
         if not num_messages:
             await update.message.reply_text("Invalid message count")
             return
 
         try:
-            result = await self.history_manager.get_chat_history(chat_id, num_messages)
-            summary = self.openai_service.get_summary(result)
+            memory_storage = self.memory_storage
+            messages_list = memory_storage.get_recent_messages(chat_id, num_messages)
+            combined_text = "\n".join(messages_list)
+            summary = self.openai_service.get_summary(combined_text)
             formatted_summary = self._format_summary(summary, update.effective_user, num_messages)
-            
+
             summary_message = await context.bot.send_message(
                 chat_id=chat_id,
                 text=formatted_summary,
@@ -41,14 +44,14 @@ class CommandHandlers:
 
             # Store context for follow-up questions
             context.chat_data['summary_message_id'] = summary_message.message_id
-            context.chat_data['original_messages'] = result
+            context.chat_data['original_messages'] = messages_list
 
         except Exception as e:
             logger.error(f"Message formatting error: {str(e)}")
             # Fallback to plain text if markdown parsing fails
             await context.bot.send_message(
                 chat_id=chat_id,
-                text=summary,
+                text=str(summary),
                 disable_web_page_preview=True,
             )
 
@@ -75,7 +78,7 @@ class CommandHandlers:
                 description="Display help information",
             ),
         ]
-        
+
         await update.inline_query.answer(results)
 
 
@@ -89,6 +92,6 @@ class CommandHandlers:
             return min(max(count, 1), max_limit)
         except ValueError:
             return None
-        
+
     def _format_summary(self, summary: str, user_name: str, message_count: int) -> str:
         return TextProcessor.format_summary_message(summary, user_name, message_count)
