@@ -1,8 +1,8 @@
 import os
 from dataclasses import dataclass, field
-# import dotenv
+import dotenv
 
-# dotenv.load_dotenv()
+dotenv.load_dotenv()
 
 # Check if all required environment variables are set
 required_vars = ["BOT_TOKEN", "OPENAI_API_KEY"]
@@ -20,6 +20,11 @@ class TelegramConfig:
 class OpenAIConfig:
     API_KEY: str = os.environ.get("OPENAI_API_KEY")
     MODEL: str = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+
+@dataclass
+class GroqAIConfig:
+    API_KEY: str = os.environ.get("GROQ_API_KEY")
+    MODEL: str = os.environ.get("GROQ_MODEL", "llama3-8b-8192")
 
 @dataclass
 class CensorConfig:

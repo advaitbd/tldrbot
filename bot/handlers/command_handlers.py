@@ -1,17 +1,20 @@
 from telegram import Update, InlineQueryResultArticle, InputTextMessageContent
 from uuid import uuid4
 from telegram.ext import ContextTypes
-from telethon.sessions import memory
 from utils.memory_storage import MemoryStorage
-from services.openai_service import OpenAIService
+from services.ai.openai_strategy import OpenAIStrategy
+from services.ai.groq_strategy import GroqAIStrategy
+from services.ai.ai_service import AIService
 from utils.text_processor import TextProcessor
 import logging
+from config.settings import OpenAIConfig, GroqAIConfig
 
 logger = logging.getLogger(__name__)
 
 class CommandHandlers:
     def __init__(self, memory_storage: MemoryStorage):
-        self.openai_service = OpenAIService()
+        openai_strategy = OpenAIStrategy(OpenAIConfig.API_KEY, OpenAIConfig.MODEL)
+        self.ai_service = AIService(openai_strategy)
         self.memory_storage = memory_storage
 
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -32,8 +35,9 @@ class CommandHandlers:
             memory_storage = self.memory_storage
             messages_list = memory_storage.get_recent_messages(chat_id, num_messages)
             combined_text = "\n".join(messages_list)
-            summary = self.openai_service.get_summary(combined_text)
-            formatted_summary = self._format_summary(summary, update.effective_user, num_messages)
+            summary = self._create_summary_prompt(combined_text)
+            response = self.ai_service.get_response(summary)
+            formatted_summary = self._format_summary(response, update.effective_user, num_messages)
 
             summary_message = await context.bot.send_message(
                 chat_id=chat_id,
@@ -51,9 +55,31 @@ class CommandHandlers:
             # Fallback to plain text if markdown parsing fails
             await context.bot.send_message(
                 chat_id=chat_id,
-                text=str(summary),
+                text=str(response),
                 disable_web_page_preview=True,
             )
+
+    async def switch_model(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not context.args:
+            await update.message.reply_text("Please provide a model name.")
+            return
+
+        openai_strategy = OpenAIStrategy(OpenAIConfig.API_KEY, OpenAIConfig.MODEL)
+        groq_strategy = GroqAIStrategy(GroqAIConfig.API_KEY, GroqAIConfig.MODEL)
+
+        new_model = context.args[0]
+
+        available_models = ["openai", "groq"]
+        if new_model not in available_models:
+            await update.message.reply_text(f"Invalid model name. Available models: {', '.join(available_models)}")
+            return
+
+        if new_model == "openai":
+            self.ai_service.set_strategy(openai_strategy)
+        else:
+            self.ai_service.set_strategy(groq_strategy)
+
+        await update.message.reply_text(f"Model switched to {new_model}")
 
     async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle inline queries."""
@@ -81,8 +107,6 @@ class CommandHandlers:
 
         await update.inline_query.answer(results)
 
-
-
     @staticmethod
     def _parse_message_count(args, default: int, max_limit: int) -> int:
         if not args:
@@ -92,6 +116,12 @@ class CommandHandlers:
             return min(max(count, 1), max_limit)
         except ValueError:
             return None
+
+    def _create_summary_prompt(self, text: str) -> str:
+        return (f"{text}\nBased on the above, output the following\n\n"
+                "Summary: [4-5 Sentences]\n\n"
+                "Sentiment: [Choose between, Positive, Negative, Neutral]\n\n"
+                "Events: [List Date, Time and Nature of any upcoming events if there are any]")
 
     def _format_summary(self, summary: str, user_name: str, message_count: int) -> str:
         return TextProcessor.format_summary_message(summary, user_name, message_count)

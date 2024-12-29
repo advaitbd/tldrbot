@@ -43,6 +43,7 @@ class Bot:
         application.add_handler(CommandHandler("help", self.command_handlers.help_command))
         application.add_handler(CommandHandler("tldr", self.command_handlers.summarize))
         application.add_handler(CommandHandler("dl", self.telegram_service.download_tiktok))
+        application.add_handler(CommandHandler("switch_model", self.command_handlers.switch_model))
 
         # Message handlers
         application.add_handler(MessageHandler(
