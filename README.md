@@ -12,34 +12,37 @@ graph TD
     B --> C[CommandHandlers]
     B --> D[MessageHandlers]
     B --> E[TelegramService]
-    C --> F[OpenAIService]
+    C --> F[AIService]
     D --> F
     C --> G[MemoryStorage]
     D --> G
-    F --> H[OpenAI API]
-    E --> I[yt-dlp]
-    G --> J[In-Memory Storage]
-    
+    F --> H[StrategyRegistry]
+    H --> I[OpenAIStrategy]
+    H --> J[GroqAIStrategy]
+    E --> K[yt-dlp]
+    G --> L[In-Memory Storage]
+
     subgraph Telegram Flow
         A -->|Sends Message| B
         B -->|Handles Command/Message| C
         B -->|Handles Message| D
     end
 
-    subgraph OpenAI Flow
+    subgraph AI Flow
         C --> F --> H
         D --> F --> H
+        H --> I
+        H --> J
     end
 
     subgraph Memory Flow
-        B --> G --> J
+        B --> G --> L
     end
 
     subgraph Video Download Flow
-        E --> I
+        E --> K
     end
 
     B -->|Sends Message| A
 
 ```
-
