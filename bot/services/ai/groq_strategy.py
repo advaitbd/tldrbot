@@ -1,5 +1,5 @@
 from openai.api_resources import chat_completion
-from config.settings import OpenAIConfig
+from config.settings import GroqAIConfig
 from services.ai.ai_model_strategy import AIModelStrategy
 from groq import Groq
 

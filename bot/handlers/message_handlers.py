@@ -2,8 +2,8 @@ from telegram import Update
 from telegram.ext import ContextTypes
 from utils.text_processor import TextProcessor
 import logging
-from services.ai.openai_strategy import OpenAIStrategy
 from services.ai.ai_service import AIService
+from services.ai import StrategyRegistry
 from config.settings import OpenAIConfig
 from typing import List
 
@@ -11,8 +11,7 @@ logger = logging.getLogger(__name__)
 
 class MessageHandlers:
     def __init__(self):
-        openai_strategy = OpenAIStrategy(OpenAIConfig.API_KEY, OpenAIConfig.MODEL)
-        self.ai_service = AIService(openai_strategy)
+        self.ai_service = AIService(StrategyRegistry.get_strategy("openai"))
         self.text_processor = TextProcessor()
 
     async def handle_reply(self, update: Update, context: ContextTypes.DEFAULT_TYPE):

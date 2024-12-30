@@ -1,9 +1,8 @@
 from telegram import Update, InlineQueryResultArticle, InputTextMessageContent
 from uuid import uuid4
 from telegram.ext import ContextTypes
+from services.ai import StrategyRegistry
 from utils.memory_storage import MemoryStorage
-from services.ai.openai_strategy import OpenAIStrategy
-from services.ai.groq_strategy import GroqAIStrategy
 from services.ai.ai_service import AIService
 from utils.text_processor import TextProcessor
 import logging
@@ -13,9 +12,8 @@ logger = logging.getLogger(__name__)
 
 class CommandHandlers:
     def __init__(self, memory_storage: MemoryStorage):
-        openai_strategy = OpenAIStrategy(OpenAIConfig.API_KEY, OpenAIConfig.MODEL)
-        self.ai_service = AIService(openai_strategy)
         self.memory_storage = memory_storage
+        self.ai_service = AIService(StrategyRegistry.get_strategy("openai"))
 
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Hello! I'm TLDR Bot. How can I help you today?")
@@ -64,24 +62,23 @@ class CommandHandlers:
             await update.message.reply_text("Please provide a model name.")
             return
 
-        openai_strategy = OpenAIStrategy(OpenAIConfig.API_KEY, OpenAIConfig.MODEL)
-        groq_strategy = GroqAIStrategy(GroqAIConfig.API_KEY, GroqAIConfig.MODEL)
-
         new_model = context.args[0]
 
-        available_models = ["openai", "groq"]
+        available_models = StrategyRegistry.available_strategies()
         if new_model not in available_models:
             await update.message.reply_text(f"Invalid model name. Available models: {', '.join(available_models)}")
             return
 
-        if new_model == "openai":
-            self.ai_service.set_strategy(openai_strategy)
-        else:
-            self.ai_service.set_strategy(groq_strategy)
+        try:
+            strategy = StrategyRegistry.get_strategy(new_model)
+            self.ai_service.set_strategy(strategy)
+            await update.message.reply_text(f"Model switched to {new_model}")
 
-        await update.message.reply_text(f"Model switched to {new_model}")
+        except Exception as e:
+            logger.error(f"Error switching model: {str(e)}")
+            await update.message.reply_text(f"Failed to switch model: {str(e)}")
 
-    async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def inline_query(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle inline queries."""
         query = update.inline_query.query
         results = [
