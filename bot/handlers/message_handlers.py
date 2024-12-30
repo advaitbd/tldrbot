@@ -1,14 +1,17 @@
 from telegram import Update
 from telegram.ext import ContextTypes
-from services.openai_service import OpenAIService
 from utils.text_processor import TextProcessor
 import logging
+from services.ai.ai_service import AIService
+from services.ai import StrategyRegistry
+from config.settings import OpenAIConfig
+from typing import List
 
 logger = logging.getLogger(__name__)
 
 class MessageHandlers:
     def __init__(self):
-        self.openai_service = OpenAIService()
+        self.ai_service = AIService(StrategyRegistry.get_strategy("openai"))
         self.text_processor = TextProcessor()
 
     async def handle_reply(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -17,8 +20,8 @@ class MessageHandlers:
 
         question = update.message.text
         original_messages = context.chat_data.get('original_messages', [])
-        
-        answer = self.openai_service.get_answer(original_messages, question)
+        prompt = self._create_qa_prompt(original_messages, question)
+        answer = self.ai_service.get_response(prompt)
         formatted_answer = self.text_processor.escape_markdown(answer)
 
         await context.bot.send_message(
@@ -32,6 +35,10 @@ class MessageHandlers:
     def _is_valid_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
         if not update.message.reply_to_message:
             return False
-        
+
         summary_message_id = context.chat_data.get('summary_message_id')
         return update.message.reply_to_message.message_id == summary_message_id
+
+    @staticmethod
+    def _create_qa_prompt(messages: List[str], question: str) -> str:
+        return "\n".join(messages) + "\n\nQuestion: " + question
