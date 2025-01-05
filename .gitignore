@@ -1,9 +1,6 @@
-env
-bot/utils/client.session
-bot/utils/config.ini
 *.pyc
 *.session
-.vscode/settings.json
+*__pycache__
 .DS_Store
 .env
 .venv
