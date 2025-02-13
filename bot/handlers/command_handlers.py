@@ -7,6 +7,8 @@ from services.ai.ai_service import AIService
 from utils.text_processor import TextProcessor
 import logging
 from config.settings import OpenAIConfig, GroqAIConfig
+from services.pdf_service import PDFService
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +105,108 @@ class CommandHandlers:
         ]
 
         await update.inline_query.answer(results)
+
+    async def handle_pdf(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle PDF summarization requests."""
+        temp_dir = None
+        try:
+            # Validation checks
+            if not update.message or not update.message.reply_to_message:
+                await self.summarize(update, context)
+                return
+
+            if not update.message.reply_to_message.document:
+                await update.message.reply_text("Please reply to a PDF document with /tldr")
+                return
+
+            document = update.message.reply_to_message.document
+            if not document.file_name.lower().endswith('.pdf'):
+                await update.message.reply_text("Please reply to a PDF document")
+                return
+
+            # Download and process PDF
+            status_message = await update.message.reply_text("Processing PDF...")
+            pdf_service = PDFService()
+
+            pdf_path = await pdf_service.upload_to_temp(document)
+            if not pdf_path:
+                await status_message.edit_text("Failed to process the PDF")
+                return
+
+            await status_message.edit_text("Extracting content...")
+
+            # Extract text content directly from PDF
+            text_content = await pdf_service.extract_text(pdf_path)
+
+            if text_content:
+                # If text extraction successful, use it directly
+                summary_prompt = (
+                    f"Please provide a comprehensive summary of the following PDF content:\n\n"
+                    f"{text_content}\n\n"
+                    f"Please structure the summary as follows:\n"
+                    f"1. Main Topic/Title\n"
+                    f"2. Important Context on Company\n"
+                    f"3. Key Questions\n"
+                    f"4. Other Important Details\n"
+                )
+
+            else:
+                # Fallback to image processing if text extraction fails
+                image_paths, temp_dir = await pdf_service.convert_pdf_to_images(pdf_path)
+                if not image_paths:
+                    await status_message.edit_text("Failed to process the PDF")
+                    return
+
+                # Process images in chunks concurrently
+                chunk_size = 3  # Process 3 pages at a time
+                all_content = []
+
+                for i in range(0, len(image_paths), chunk_size):
+                    chunk = image_paths[i:i + chunk_size]
+                    tasks = []
+
+                    for image_path in chunk:
+                        tasks.append(pdf_service.process_image(image_path, self.ai_service))
+
+                    chunk_results = await asyncio.gather(*tasks)
+                    all_content.extend([r for r in chunk_results if r])
+
+                text_content = "\n\n".join(all_content)
+                summary_prompt = (
+                    f"Please provide a comprehensive summary of the following PDF content:\n\n"
+                    f"{text_content}\n\n"
+                    f"Please structure the summary as follows:\n"
+                    f"1. Main Topic/Title\n"
+                    f"2. Key Points (3-5 points)\n"
+                    f"3. Important Details\n"
+                    f"4. Conclusion/Summary"
+                )
+
+            await status_message.edit_text("Generating summary...")
+            overall_summary = self.ai_service.get_response(summary_prompt)
+            formatted_summary = self._format_summary(
+                overall_summary,
+                update.effective_user,
+                1  # Single summary
+            )
+
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text=formatted_summary,
+                parse_mode="MarkdownV2",
+            )
+            await status_message.delete()
+
+        except Exception as e:
+            logger.error(f"Error processing PDF: {e}")
+            await update.message.reply_text(f"An error occurred while processing the PDF: {str(e)}")
+
+        finally:
+            # Cleanup
+            if temp_dir:
+                temp_dir.cleanup()
+            if 'pdf_path' in locals() and pdf_path and os.path.exists(pdf_path):
+                os.remove(pdf_path)
 
     @staticmethod
     def _parse_message_count(args, default: int, max_limit: int) -> int:

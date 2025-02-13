@@ -41,9 +41,17 @@ class Bot:
         # Command handlers
         application.add_handler(CommandHandler("start", self.command_handlers.start))
         application.add_handler(CommandHandler("help", self.command_handlers.help_command))
-        application.add_handler(CommandHandler("tldr", self.command_handlers.summarize))
         application.add_handler(CommandHandler("dl", self.telegram_service.download_tiktok))
         application.add_handler(CommandHandler("switch_model", self.command_handlers.switch_model))
+
+        # PDF handler - Update this part
+        application.add_handler(CommandHandler(
+            "tldr",
+            self.command_handlers.handle_pdf,
+            filters.REPLY
+        ))
+
+        application.add_handler(CommandHandler("tldr", self.command_handlers.summarize))
 
         # Message handlers
         application.add_handler(MessageHandler(
@@ -56,6 +64,7 @@ class Bot:
 
         # Message storage handler
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self._store_in_memory))
+
 
     async def _store_in_memory(self, update, context):
         """

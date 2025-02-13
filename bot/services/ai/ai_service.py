@@ -10,5 +10,8 @@ class AIService:
     def get_response(self, prompt: str) -> str | None:
         return self._strategy.get_response(prompt)
 
+    def get_image_response(self, prompt: str) -> str | None:
+        return self._strategy.get_image_response(prompt)
+
     def get_current_model(self) -> str:
         return self._strategy.get_current_model()

@@ -1,8 +1,8 @@
 import os
 from dataclasses import dataclass, field
-# import dotenv
+import dotenv
 
-# dotenv.load_dotenv()
+dotenv.load_dotenv()
 
 # Check if all required environment variables are set
 required_vars = ["BOT_TOKEN", "OPENAI_API_KEY"]
