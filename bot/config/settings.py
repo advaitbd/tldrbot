@@ -1,7 +1,6 @@
 import os
 from dataclasses import dataclass, field
 # import dotenv
-
 # dotenv.load_dotenv()
 
 # Check if all required environment variables are set
@@ -25,6 +24,11 @@ class OpenAIConfig:
 class GroqAIConfig:
     API_KEY: str = os.environ.get("GROQ_API_KEY")
     MODEL: str = os.environ.get("GROQ_MODEL", "llama3-8b-8192")
+
+@dataclass
+class DeepSeekAIConfig:
+    API_KEY: str = os.environ.get("DEEPSEEK_API_KEY")
+    MODEL: str = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
 
 @dataclass
 class CensorConfig:

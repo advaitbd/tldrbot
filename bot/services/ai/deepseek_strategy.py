@@ -2,10 +2,10 @@ from openai import OpenAI
 from config.settings import OpenAIConfig
 from services.ai.ai_model_strategy import AIModelStrategy
 
-class OpenAIStrategy(AIModelStrategy):
+class DeepSeekStrategy(AIModelStrategy):
     def __init__(self, api_key: str, model: str):
         self.model = model
-        self.client = OpenAI(api_key=api_key)
+        self.client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
 
     def get_response(self, prompt: str) -> str | None:
         try:

@@ -1,5 +1,5 @@
 python-telegram-bot[webhooks]==20.0
-openai==0.27.8
+openai==1.63.0
 DateTime==5.1
 yt-dlp==2024.10.22
 groq==0.13.1

@@ -1,7 +1,8 @@
 from services.ai.openai_strategy import OpenAIStrategy
 from services.ai.groq_strategy import GroqAIStrategy
+from services.ai.deepseek_strategy import DeepSeekStrategy
 from services.ai.ai_model_strategy import AIModelStrategy
-from config.settings import OpenAIConfig, GroqAIConfig
+from config.settings import OpenAIConfig, GroqAIConfig, DeepSeekAIConfig
 
 class StrategyRegistry:
     _strategies = {}
@@ -21,3 +22,5 @@ class StrategyRegistry:
 # Register strategies with their respective API keys and models
 StrategyRegistry.register_strategy("openai", OpenAIStrategy(OpenAIConfig.API_KEY, OpenAIConfig.MODEL))
 StrategyRegistry.register_strategy("groq", GroqAIStrategy(GroqAIConfig.API_KEY, GroqAIConfig.MODEL))
+StrategyRegistry.register_strategy("deepseek", DeepSeekStrategy(DeepSeekAIConfig.API_KEY, DeepSeekAIConfig.MODEL))
+
