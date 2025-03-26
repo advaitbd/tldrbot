@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 class MessageHandlers:
     def __init__(self):
-        self.ai_service = AIService(StrategyRegistry.get_strategy("openai"))
+        self.ai_service = AIService(StrategyRegistry.get_strategy("deepseek"))
         self.text_processor = TextProcessor()
 
     async def handle_reply(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
