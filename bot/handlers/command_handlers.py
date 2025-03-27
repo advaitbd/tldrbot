@@ -15,9 +15,6 @@ class CommandHandlers:
         self.memory_storage = memory_storage
         self.ai_service = AIService(StrategyRegistry.get_strategy("deepseek"))
 
-    async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        await update.message.reply_text("Hello! I'm TLDR Bot. How can I help you today?")
-
     async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         help_text = (
             "🤖 *Welcome to TLDR Bot!* 🤖\n\n"
