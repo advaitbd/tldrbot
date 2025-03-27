@@ -13,13 +13,27 @@ logger = logging.getLogger(__name__)
 class CommandHandlers:
     def __init__(self, memory_storage: MemoryStorage):
         self.memory_storage = memory_storage
-        self.ai_service = AIService(StrategyRegistry.get_strategy("openai"))
-
-    async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        await update.message.reply_text("Hello! I'm TLDR Bot. How can I help you today?")
+        self.ai_service = AIService(StrategyRegistry.get_strategy("deepseek"))
 
     async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        await update.message.reply_text("I'm TLDR Bot. I can summarize conversations and answer questions. Use /tldr to summarize a conversation and /help to see this message again.")
+        help_text = (
+            "🤖 *Welcome to TLDR Bot!* 🤖\n\n"
+            "I help you summarize conversations and provide insights. Here's what I can do:\n\n"
+            "*Commands:*\n"
+            "• `/tldr [number]` - Summarize the last [number] messages (default: 50)\n"
+            "• `/dl [URL]` - Download TikToks, Reels, Shorts, etc. (WIP: might not work sometimes)\n"
+            "• `/switch_model [model]` - Change the AI model\n"
+            "\n*Available Models:*\n"
+            "• `groq` - Uses Llama 3 (8bn) hosted by groq\n"
+            "• `deepseek` - DeepSeek V3\n"
+            "\n*Features:*\n"
+            "• Reply to my summaries with questions for more insights\n"
+            "• View sentiment analysis in summaries\n"
+            "• Get key events extracted from conversations\n"
+            "\n*Current model:* " + self.ai_service.get_current_model()
+        )
+
+        await update.message.reply_text(help_text, parse_mode="Markdown")
 
     async def summarize(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id = update.effective_chat.id

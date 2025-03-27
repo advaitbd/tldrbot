@@ -1,4 +1,6 @@
+# TeleBot/bot/main.py
 import logging
+import asyncio
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -6,6 +8,7 @@ from telegram.ext import (
     InlineQueryHandler,
     filters,
 )
+from telegram import BotCommand
 from utils.memory_storage import MemoryStorage
 from config.settings import TelegramConfig
 from handlers.command_handlers import CommandHandlers
@@ -35,11 +38,13 @@ class Bot:
         # Register handlers
         self._register_handlers(application)
 
+        # Register post-init callback to set up commands
+        application.post_init = self._setup_commands
+
         return application
 
     def _register_handlers(self, application):
         # Command handlers
-        application.add_handler(CommandHandler("start", self.command_handlers.start))
         application.add_handler(CommandHandler("help", self.command_handlers.help_command))
         application.add_handler(CommandHandler("tldr", self.command_handlers.summarize))
         application.add_handler(CommandHandler("dl", self.telegram_service.download_tiktok))
@@ -57,11 +62,21 @@ class Bot:
         # Message storage handler
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self._store_in_memory))
 
+    async def _setup_commands(self, application):
+        """Set up the bot commands that appear in the bot menu"""
+        commands = [
+            BotCommand("help", "Show help information"),
+            BotCommand("tldr", "Summarize recent messages"),
+            BotCommand("dl", "Download TikTok videos"),
+            BotCommand("switch_model", "Switch AI model")
+        ]
+
+        await application.bot.set_my_commands(commands)
+
     async def _store_in_memory(self, update, context):
         """
         Handler to store messages in-memory
         """
-
         chat_id = update.effective_chat.id
         sender_name = update.effective_user.name if update.effective_user else "Unknown"
         message = update.message.text

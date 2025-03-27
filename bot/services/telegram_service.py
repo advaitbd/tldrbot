@@ -21,7 +21,7 @@ class TelegramService:
             video_path = await TelegramService._download_video(url)
             if video_path:
                 await context.bot.send_video(
-                    chat_id=chat_id, 
+                chat_id=chat_id,
                     video=open(video_path, 'rb')
                 )
                 os.remove(video_path)
