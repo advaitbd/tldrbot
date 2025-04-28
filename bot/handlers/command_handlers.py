@@ -1,6 +1,10 @@
-from telegram import Update, InlineQueryResultArticle, InputTextMessageContent
+# Add necessary imports
+from telegram import Update, InlineQueryResultArticle, InputTextMessageContent, PhotoSize
 from uuid import uuid4
-from telegram.ext import ContextTypes
+from telegram.ext import (
+    ContextTypes, ConversationHandler, CommandHandler as TelegramCommandHandler, # Rename to avoid clash
+    MessageHandler, filters
+)
 from services.ai import StrategyRegistry
 from utils.memory_storage import MemoryStorage
 from services.ai.ai_service import AIService
@@ -8,7 +12,20 @@ from utils.text_processor import TextProcessor
 import logging
 from config.settings import OpenAIConfig, GroqAIConfig
 
+# Import the new bill splitting service functions
+from services.bill_splitter import (
+    extract_receipt_data_from_image,
+    parse_payment_context_with_llm,
+    calculate_split,
+    format_split_results,
+    ReceiptData # Import ReceiptData for type hinting if needed
+)
+from io import BytesIO
+
 logger = logging.getLogger(__name__)
+
+# Define conversation states
+RECEIPT_IMAGE, PAYMENT_CONTEXT = range(2)
 
 class CommandHandlers:
     def __init__(self, memory_storage: MemoryStorage):
@@ -136,3 +153,78 @@ class CommandHandlers:
 
     def _format_summary(self, summary: str, user_name: str, message_count: int) -> str:
         return TextProcessor.format_summary_message(summary, user_name, message_count)
+
+    # --- Bill Splitting Conversation Handlers ---
+
+    async def split_bill_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await update.message.reply_text(
+            "To split a bill, send a photo of the receipt *with a caption* describing who paid for what.\n\n"
+            "Example caption:\n"
+            "Alice: Burger, Fries\n"
+            "Bob: Salad\n"
+            "Shared: Drinks"
+            "\n\n(Make sure item names in your caption roughly match the receipt.)",
+            parse_mode="Markdown"
+        )
+
+    async def split_bill_photo_with_context(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        # 1. Check for photo and caption
+        if not update.message.photo or not update.message.caption:
+            await update.message.reply_text(
+                "Please send a *photo of the receipt* with a *caption* describing who paid for what.",
+                parse_mode="Markdown"
+            )
+            return
+
+        photo_file = await update.message.photo[-1].get_file()
+        image_stream = BytesIO()
+        await photo_file.download_to_memory(image_stream)
+        image_stream.seek(0)
+        image_bytes = image_stream.read()
+        user_context_text = update.message.caption
+
+        await update.message.reply_text("Processing receipt and context...")
+
+        # 2. Extract receipt data
+        receipt_data = await extract_receipt_data_from_image(image_bytes)
+        if not receipt_data:
+            await update.message.reply_text(
+                "Sorry, I couldn't extract data from that receipt. Please try again with a clearer image."
+            )
+            return
+
+        # 3. Parse context and calculate split
+        parsing_result = parse_payment_context_with_llm(
+            user_context_text,
+            receipt_data.items,
+            self.ai_service
+        )
+
+        if isinstance(parsing_result, str):
+            await update.message.reply_text(
+                f"Context Parsing Failed: {parsing_result}\nPlease try again with a clearer caption."
+            )
+            return
+
+        assignments, shared_items, participants = parsing_result
+
+        split_result = calculate_split(
+            assignments,
+            shared_items,
+            participants,
+            receipt_data.total_amount,
+            receipt_data.service_charge,
+            receipt_data.tax_amount
+        )
+
+        if isinstance(split_result, str):
+            await update.message.reply_text(f"Calculation error: {split_result}")
+            return
+
+        final_message = format_split_results(
+            split_result,
+            receipt_data.total_amount,
+            receipt_data.service_charge,
+            receipt_data.tax_amount
+        )
+        await update.message.reply_text(final_message, parse_mode="Markdown")
