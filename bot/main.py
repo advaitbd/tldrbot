@@ -12,7 +12,7 @@ from telegram.ext import (
 from telegram import BotCommand
 from utils.memory_storage import MemoryStorage
 from config.settings import TelegramConfig
-from handlers.command_handlers import CommandHandlers, RECEIPT_IMAGE, PAYMENT_CONTEXT # Import states
+from handlers.command_handlers import CommandHandlers, RECEIPT_IMAGE, CONFIRMATION # Import states
 from handlers.message_handlers import MessageHandlers
 from services.telegram_service import TelegramService
 
@@ -51,12 +51,24 @@ class Bot:
         application.add_handler(CommandHandler("tldr", self.command_handlers.summarize))
         application.add_handler(CommandHandler("dl", self.telegram_service.download_tiktok))
         application.add_handler(CommandHandler("switch_model", self.command_handlers.switch_model))
-        application.add_handler(MessageHandler(
-            filters.PHOTO & filters.Caption(),
-            self.command_handlers.split_bill_photo_with_context
-        ))
-
-        application.add_handler(CommandHandler("splitbill", self.command_handlers.split_bill_start))
+        # Bill splitting conversation (receipt + confirmation)
+        split_conv = ConversationHandler(
+            entry_points=[CommandHandler("splitbill", self.command_handlers.split_bill_start)],
+            states={
+                RECEIPT_IMAGE: [MessageHandler(filters.PHOTO & filters.Caption(),
+                                               self.command_handlers.split_bill_photo_with_context)],
+                CONFIRMATION: [
+                    MessageHandler(filters.Regex("^(?i)(confirm|✅)$"),
+                                   self.command_handlers.split_bill_confirm),
+                    MessageHandler(filters.Regex("^(?i)(cancel|no)$"),
+                                   self.command_handlers.split_bill_cancel),
+                ],
+            },
+            fallbacks=[CommandHandler("cancel", self.command_handlers.split_bill_cancel)],
+            per_user=True,
+            per_chat=True,
+        )
+        application.add_handler(split_conv)
         # Message handlers
         application.add_handler(MessageHandler(
             filters.REPLY & ~filters.COMMAND, # Ensure it's not a command reply

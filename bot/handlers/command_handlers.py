@@ -25,7 +25,7 @@ from io import BytesIO
 logger = logging.getLogger(__name__)
 
 # Define conversation states
-RECEIPT_IMAGE, PAYMENT_CONTEXT = range(2)
+RECEIPT_IMAGE, CONFIRMATION = range(2)
 
 class CommandHandlers:
     def __init__(self, memory_storage: MemoryStorage):
@@ -157,15 +157,19 @@ class CommandHandlers:
     # --- Bill Splitting Conversation Handlers ---
 
     async def split_bill_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """
+        Entry point for bill splitting: ask user to send receipt photo with caption.
+        """
         await update.message.reply_text(
             "To split a bill, send a photo of the receipt *with a caption* describing who paid for what.\n\n"
             "Example caption:\n"
             "Alice: Burger, Fries\n"
             "Bob: Salad\n"
-            "Shared: Drinks"
-            "\n\n(Make sure item names in your caption roughly match the receipt.)",
+            "Shared: Drinks\n\n"
+            "(Make sure item names in your caption roughly match the receipt.)",
             parse_mode="Markdown"
         )
+        return RECEIPT_IMAGE
 
     async def split_bill_photo_with_context(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         # 1. Check for photo and caption
@@ -191,23 +195,68 @@ class CommandHandlers:
             await update.message.reply_text(
                 "Sorry, I couldn't extract data from that receipt. Please try again with a clearer image."
             )
-            return
+            return RECEIPT_IMAGE
 
-        # 3. Parse context and calculate split
+        # 3. Parse context and prepare confirmation
         parsing_result = parse_payment_context_with_llm(
             user_context_text,
             receipt_data.items,
             self.ai_service
         )
 
+        # Handle parsing errors (returns error message string)
         if isinstance(parsing_result, str):
             await update.message.reply_text(
                 f"Context Parsing Failed: {parsing_result}\nPlease try again with a clearer caption."
             )
-            return
+            return RECEIPT_IMAGE
 
+        # Unpack parsing results
         assignments, shared_items, participants = parsing_result
 
+        # Store intermediate data for confirmation
+        context.user_data['bill_split'] = {
+            'receipt_data': receipt_data,
+            'assignments': assignments,
+            'shared_items': shared_items,
+            'participants': participants,
+        }
+
+        # Build confirmation summary
+        lines = ["I’ve parsed your receipt as follows:"]
+        # Assigned items per person
+        for person, items in assignments.items():
+            item_names = ", ".join(item.name for item in items)
+            lines.append(f"- {person}: {item_names}")
+        # Shared items
+        if shared_items:
+            shared_names = ", ".join(item.name for item in shared_items)
+            lines.append(f"- Shared: {shared_names}")
+        # Participants
+        if participants:
+            parts = ", ".join(participants)
+            lines.append(f"Participants: {parts}")
+        lines.append("\nPlease reply with 'confirm' to finalize the split, or /cancel to abort.")
+        await update.message.reply_text("\n".join(lines))
+        return CONFIRMATION
+    
+    async def split_bill_confirm(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """
+        Finalize bill split after user confirmation.
+        """
+        data = context.user_data.get('bill_split')
+        if not data:
+            await update.message.reply_text(
+                "No active bill-splitting operation. Please use /splitbill to start."
+            )
+            return ConversationHandler.END
+
+        receipt_data = data['receipt_data']
+        assignments = data['assignments']
+        shared_items = data['shared_items']
+        participants = data['participants']
+
+        # Perform calculation
         split_result = calculate_split(
             assignments,
             shared_items,
@@ -216,11 +265,12 @@ class CommandHandlers:
             receipt_data.service_charge,
             receipt_data.tax_amount
         )
-
         if isinstance(split_result, str):
             await update.message.reply_text(f"Calculation error: {split_result}")
-            return
+            context.user_data.pop('bill_split', None)
+            return ConversationHandler.END
 
+        # Format and send final results
         final_message = format_split_results(
             split_result,
             receipt_data.total_amount,
@@ -228,3 +278,15 @@ class CommandHandlers:
             receipt_data.tax_amount
         )
         await update.message.reply_text(final_message, parse_mode="Markdown")
+        # Clean up
+        context.user_data.pop('bill_split', None)
+        return ConversationHandler.END
+
+    async def split_bill_cancel(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """
+        Cancel the bill-splitting flow.
+        """
+        # Optionally clean up any stored data
+        context.user_data.pop('bill_split', None)
+        await update.message.reply_text("Bill splitting cancelled.")
+        return ConversationHandler.END
