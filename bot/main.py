@@ -58,9 +58,9 @@ class Bot:
                 RECEIPT_IMAGE: [MessageHandler(filters.PHOTO & filters.Caption(),
                                                self.command_handlers.split_bill_photo_with_context)],
                 CONFIRMATION: [
-                    MessageHandler(filters.Regex("^(?i)(confirm|✅)$"),
+                    MessageHandler(filters.Regex("^(confirm|✅)$", flags=re.IGNORECASE),
                                    self.command_handlers.split_bill_confirm),
-                    MessageHandler(filters.Regex("^(?i)(cancel|no)$"),
+                    MessageHandler(filters.Regex("^(cancel|no)$", flags=re.IGNORECASE),
                                    self.command_handlers.split_bill_cancel),
                 ],
             },
