@@ -11,9 +11,19 @@ from pydantic import BaseModel, Field, ValidationError
 from telegram import Update
 from telegram.ext import ContextTypes
 
+import os
+import base64
+import json
+import logging
+
 # Import AIService to use for context parsing LLM call
 from services.ai.ai_service import AIService # Assuming this path is correct
 from config.settings import OpenAIConfig # Assuming this path is correct
+
+# Import Mistral OCR client
+from mistralai import Mistral
+
+logger = logging.getLogger(__name__)
 
 logger = logging.getLogger(__name__)
 
@@ -58,17 +68,65 @@ class ContextParsingResult(BaseModel):
 # --- AI Extraction Logic ---
 async def extract_receipt_data_from_image(image_bytes: bytes) -> ReceiptData | None:
     """
-    Sends the receipt image (as bytes) to OpenAI Vision API for structured data extraction,
-    including optional service charge and tax.
+    Uses Mistral OCR API to extract text from the receipt image, then parses it into structured ReceiptData using an LLM.
     """
-    if not OpenAIConfig.API_KEY:
-        logger.error("OpenAI API Key is not configured.")
+    mistral_api_key = os.getenv("MISTRAL_API_KEY")
+    if not mistral_api_key:
+        logger.error("Mistral API Key is not configured (MISTRAL_API_KEY).")
         return None
 
-    client = OpenAI(api_key=OpenAIConfig.API_KEY)
-    base64_image = base64.b64encode(image_bytes).decode("utf-8")
+    logger.info("Starting receipt extraction using Mistral OCR.")
+    import tempfile
 
-    # Get the schema dictionary
+    try:
+        with Mistral(api_key=mistral_api_key) as mistral:
+            logger.info("Saving image bytes to a temporary file for upload to Mistral.")
+            with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
+                tmp.write(image_bytes)
+                tmp_path = tmp.name
+            logger.info(f"Temporary file created at {tmp_path}")
+
+            logger.info("Uploading file to Mistral for OCR processing...")
+            uploaded_file = mistral.files.upload(
+                file={
+                    "file_name": os.path.basename(tmp_path),
+                    "content": open(tmp_path, "rb"),
+                },
+                purpose="ocr"
+            )
+            logger.info(f"File uploaded to Mistral. File ID: {uploaded_file.id}")
+
+            signed_url = mistral.files.get_signed_url(file_id=uploaded_file.id)
+            logger.info(f"Obtained signed URL for OCR: {signed_url.url}")
+
+            logger.info("Requesting OCR processing from Mistral using signed URL...")
+            res = mistral.ocr.process(
+                model="mistral-ocr-latest",
+                document={
+                    "type": "image_url",
+                    "image_url": signed_url.url,
+                }
+            )
+            logger.info("OCR request sent to Mistral. Awaiting response...")
+
+            # Extract the OCR text from the first page's markdown
+            ocr_text = ""
+            if hasattr(res, "pages") and res.pages:
+                logger.info(f"Mistral OCR returned {len(res.pages)} page(s). Extracting markdown from first page.")
+                ocr_text = res.pages[0].markdown
+                logger.debug(f"OCR Markdown (first 500 chars): {ocr_text[:500]}")
+            else:
+                logger.error("Mistral OCR did not return any pages.")
+                return None
+    except Exception as e:
+        logger.error(f"Mistral OCR error: {e}")
+        return None
+
+    if not ocr_text.strip():
+        logger.error("Mistral OCR returned empty text.")
+        return None
+
+    # Step 2: Use LLM to parse OCR text into ReceiptData structure
     try:
         schema_dict = ReceiptData.model_json_schema()
         schema_json_string = json.dumps(schema_dict, indent=2)
@@ -76,72 +134,55 @@ async def extract_receipt_data_from_image(image_bytes: bytes) -> ReceiptData | N
         logger.error(f"Failed to generate schema for ReceiptData: {e}")
         return None
 
+    logger.info("Parsing OCR text to structured ReceiptData using LLM (deepseek strategy).")
+    # Use OpenAI or another LLM to structure the OCR text (reuse existing LLM logic)
     try:
-        response = client.chat.completions.create(
-            model="gpt-4o", # Or your preferred vision model
-            messages=[
-                {
-                    "role": "system",
-                    "content": f"""
-                    Extract structured data from the receipt image. Provide the response as a JSON object
-                    matching the following Pydantic model schema:
-                    {schema_json_string}
+        from services.ai import StrategyRegistry
+        from services.ai.ai_service import AIService
+        ai_service = AIService(StrategyRegistry.get_strategy("deepseek"))
 
-                    Key Extraction Points:
-                    - 'items': Ensure this list includes name, quantity, unitPrice, and totalPrice for each line item. Calculate totalPrice (quantity * unitPrice) if not explicitly present per item.
-                    - 'totalAmount': This MUST be the final, total amount paid as shown on the receipt.
-                    - 'serviceCharge': If a separate line item for service charge exists, extract its value here. If not present, omit this field or set to null.
-                    - 'taxAmount': If a separate line item for tax (like GST, VAT, Sales Tax) exists, extract its value here. Sum multiple taxes if necessary into this single field. If no explicit tax line item is present, omit this field or set to null. It's important to distinguish tax from service charge.
-                    - Identify 'merchant' name and 'date' if available.
-                    """
-                },
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": "Extract receipt data from this image:"},
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/jpeg;base64,{base64_image}",
-                                "detail": "high" # Use high detail for potentially small text
-                            }
-                        }
-                    ]
-                }
-            ],
-            response_format={"type": "json_object"},
-            temperature=0.1 # Low temperature for factual extraction
+        prompt = (
+            f"The following is the raw OCR text from a receipt image:\n"
+            f"--- OCR TEXT START ---\n"
+            f"{ocr_text}\n"
+            f"--- OCR TEXT END ---\n\n"
+            f"Extract structured data from the above OCR text. Provide the response as a JSON object "
+            f"matching the following Pydantic model schema:\n"
+            f"{schema_json_string}\n\n"
+            f"Key Extraction Points:\n"
+            f"- 'items': Ensure this list includes name, quantity, unitPrice, and totalPrice for each line item. "
+            f"Calculate totalPrice (quantity * unitPrice) if not explicitly present per item.\n"
+            f"- 'totalAmount': This MUST be the final, total amount paid as shown on the receipt.\n"
+            f"- 'serviceCharge': If a separate line item for service charge exists, extract its value here. "
+            f"If not present, omit this field or set to null.\n"
+            f"- 'taxAmount': If a separate line item for tax (like GST, VAT, Sales Tax) exists, extract its value here. "
+            f"Sum multiple taxes if necessary into this single field. If no explicit tax line item is present, omit this field or set to null. "
+            f"It's important to distinguish tax from service charge.\n"
+            f"- Identify 'merchant' name and 'date' if available.\n"
+            f"Respond ONLY with the JSON object, no explanation."
         )
 
-        extracted_json = json.loads(response.choices[0].message.content)
-        logger.info(f"Raw JSON extracted: {json.dumps(extracted_json, indent=2)}")
+        logger.debug(f"Sending prompt to LLM for structuring OCR text (first 500 chars of OCR text): {ocr_text[:500]}")
+        llm_response = ai_service.get_response(prompt)
+        logger.info("Received response from LLM for OCR structuring.")
+
+        # Remove markdown code block if present
+        llm_response_str = llm_response.strip()
+        if llm_response_str.startswith("```json"):
+            llm_response_str = llm_response_str[7:-3].strip()
+        elif llm_response_str.startswith("```"):
+            llm_response_str = llm_response_str[3:-3].strip()
+
+        extracted_json = json.loads(llm_response_str)
+        logger.info(f"Raw JSON extracted from LLM: {json.dumps(extracted_json, indent=2)}")
 
         # Validate and parse the JSON data using Pydantic
         receipt_data = ReceiptData.model_validate(extracted_json)
+        logger.info("Successfully parsed ReceiptData from OCR text.")
         return receipt_data
 
-    except OpenAIError as e:
-        logger.error(f"OpenAI API error during receipt extraction: {e}")
-        return None
-    except json.JSONDecodeError as e:
-        logger.error(f"Failed to decode JSON response from AI: {e}")
-        error_content = "No response content available"
-        try:
-             if response and response.choices:
-                error_content = response.choices[0].message.content
-             elif response:
-                 error_content = str(response) # Fallback
-        except Exception:
-            pass
-        logger.error(f"Faulty response content: {error_content}")
-        return None
-    except ValidationError as e:
-         logger.error(f"Pydantic validation error for extracted data: {e}")
-         log_data = extracted_json if 'extracted_json' in locals() else "Unavailable"
-         logger.error(f"Data causing validation error: {json.dumps(log_data, indent=2)}")
-         return None
     except Exception as e:
-        logger.exception("Unexpected error during receipt extraction:")
+        logger.error(f"Error parsing OCR text to ReceiptData: {e}")
         return None
 
 # --- LLM-based Context Parsing Logic ---
