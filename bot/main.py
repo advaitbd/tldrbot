@@ -15,7 +15,7 @@ from config.settings import TelegramConfig
 from handlers.command_handlers import CommandHandlers, RECEIPT_IMAGE, CONFIRMATION # Import states
 from handlers.message_handlers import MessageHandlers
 from services.telegram_service import TelegramService
-
+import re
 
 # Configure logging
 logging.basicConfig(
