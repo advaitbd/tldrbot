@@ -1,145 +1,257 @@
 # TLDRBot
 
-A Telegram bot for summarizing conversations, answering context-aware questions, splitting bills from receipts, and downloading short-form videos. Powered by multiple AI models and designed for group productivity.
+A powerful Telegram bot that enhances group productivity through AI-powered conversation management, bill splitting, and media handling. Built with Python and modern AI models, TLDRBot helps teams stay organized and efficient in their group chats.
 
----
+## 🌟 Key Features
 
-## Features
+### 1. Smart Conversation Management
+- **AI-Powered Summaries**: Use `/tldr` to get concise summaries of recent chat messages
+  - Extracts key points, sentiment, and events
+  - Configurable message range (default: 50, max: 400)
+  - Supports multiple AI models for different quality/performance needs
 
-- **Conversation Summarization:**
-  Use `/tldr` to generate concise summaries of recent chat messages, including sentiment and event extraction.
+### 2. Context-Aware Q&A
+- Reply to any summary with questions
+- Bot provides answers based on the conversation context
+- Maintains conversation memory for accurate responses
 
-- **Contextual Q&A:**
-  Reply to a summary with a question to get context-aware answers based on the summarized conversation.
+### 3. Intelligent Bill Splitting
+- **Receipt Processing**: Upload receipt photos with payment context
+- **Smart OCR**: Uses Mistral AI for accurate text extraction
+- **Flexible Payment Matching**:\
+  Individual items: "Alice: Burger, Bob: Salad"\
+  Shared items: "Shared: Drinks"\
+  Automatic tax and service charge calculations
+- **Interactive Flow**: Confirmation steps to ensure accuracy
 
-- **Bill Splitting from Receipts:**
-  Use `/splitbill` to upload a receipt photo and caption who paid for what. The bot uses OCR and AI to extract items, match them to people, and calculate who owes what, including service charge and tax.
+### 4. Media Handling
+- **Video Downloads**: `/dl` command for short-form videos
+  - Supports TikTok, YouTube Shorts, Instagram Reels
+  - Direct download in chat
+  - Powered by yt-dlp for reliable downloads
 
-- **Short Video Downloading:**
-  Use `/dl <url>` to download TikTok, YouTube Shorts, Instagram Reels, and similar videos directly in chat.
+### 5. Multi-Model AI Support
+- Switch between different AI models:
+  - OpenAI (GPT models)
+  - Groq (Llama 3)
+  - DeepSeek
+- Use `/switch_model` to change models based on needs
 
-- **Multi-Model AI Support:**
-  Switch between OpenAI, Groq (Llama 3), and DeepSeek models for summaries and Q&A with `/switch_model`.
+## 🛠️ Technical Architecture
 
-- **In-Memory Message Storage:**
-  Efficiently stores recent messages per chat for fast summarization (no persistent database required).
+### Core Components
 
----
+1. **Command Handlers**
+   - Manages all bot commands
+   - Implements conversation flows
+   - Handles user interactions
 
-## Usage
+2. **Message Handlers**
+   - Processes regular messages
+   - Manages context-aware responses
+   - Handles reply chains
 
-### Commands
+3. **AI Service**
+   - Strategy pattern for multiple AI models
+   - Handles summarization and Q&A
+   - OCR processing for receipts
 
-- `/tldr [number]`
-  Summarize the last `[number]` messages (default: 50, max: 400).
+4. **Memory Storage**
+   - In-memory message storage
+   - Efficient chat history management
+   - No persistent database required
 
-- `/splitbill`
-  Start a bill-splitting flow. Send a receipt photo with a caption (e.g., `Alice: Burger, Bob: Salad, Shared: Drinks`).
+5. **Bill Splitting System**
+   - **Receipt Processing Pipeline**:
+     - OCR using Mistral AI for text extraction
+     - AI-powered receipt data structuring
+     - Pydantic models for data validation
+   
+   - **Context Analysis**:
+     - LLM-based payment context parsing
+     - Smart item-to-person matching
+     - Shared item detection
+   
+   - **Calculation Engine**:
+     - Proportional tax and service charge distribution
+     - Individual and shared item cost calculations
+     - Validation against receipt totals
+   
+   - **Conversation Flow**:
+     - Multi-step confirmation process
+     - Error handling and recovery
+     - User-friendly result formatting
 
-- `/dl <url>`
-  Download a short-form video from TikTok, YouTube Shorts, Instagram Reels, etc.
-
-- `/switch_model <model>`
-  Switch the AI model for summaries and Q&A. Available: `openai`, `groq`, `deepseek`.
-
-- `/help`
-  Show help and feature overview.
-
-- `/cancel`
-  Cancel the current operation (e.g., bill splitting).
-
----
-
-## Architecture
+### System Flow
 
 ```mermaid
 graph TD
-    A[User] -->|Telegram| B[TLDRBot]
-    B -->|/tldr, /splitbill, /dl, etc.| C[CommandHandlers]
-    B -->|Replies| D[MessageHandlers]
-    B --> E[TelegramService]
-    C --> F[AIService]
-    D --> F
-    C --> G[MemoryStorage]
-    D --> G
-    F --> H[StrategyRegistry]
-    H --> I[OpenAIStrategy]
-    H --> J[GroqAIStrategy]
-    H --> K[DeepSeekStrategy]
-    E --> L[yt-dlp]
-    G --> M[In-Memory Storage]
+    User["User"] -- Telegram --> TLDRBotApplication["TLDRBot"]
 
-    subgraph Telegram Flow
-        A -->|Sends Message| B
-        B -->|Handles Command/Message| C
-        B -->|Handles Reply| D
+    subgraph TLDRBotApplication
+        direction TB
+        TelegramInterface["Telegram API Interface\n(python-telegram-bot)"]:::main
+
+        TelegramInterface --> RequestRouter["Update Router"]:::main
+
+        RequestRouter -- "/command" --> CommandHandlers["Command Handlers"]:::main
+        RequestRouter -- "message" --> MessageHandlers["Message Handlers"]:::main
+
+        subgraph Services["Core Services"]
+            direction LR
+            
+            subgraph MainServices["Main Functionality"]
+                direction TB
+                CommandHandlers --> AIService["AI Service"]:::ai
+                CommandHandlers --> MemoryStorageService["Memory Storage Service"]:::storage
+                CommandHandlers --> VideoDownloadService["Video Download Service"]:::video
+                CommandHandlers --> BillSplittingService["Bill Splitting Service"]:::bill
+
+                MessageHandlers --> AIService
+                MessageHandlers --> MemoryStorageService
+
+                AIService --> AIModels["AI Models\n(OpenAI, Groq, DeepSeek)"]:::ai
+                MemoryStorageService --> InMemoryDataStore["In-Memory Data Store"]:::storage
+                VideoDownloadService --> YTDLP["yt-dlp"]:::video
+            end
+
+            subgraph BillSplittingDetail["Bill Splitting Service Details"]
+                direction TB
+                BillSplittingService   --> BSS_OCR["Receipt OCR"]:::bill
+                BSS_OCR                --> BSS_DataStruct["Data Structuring"]:::bill
+                BSS_DataStruct         --> BSS_ContextParse["Context Parsing"]:::bill
+                BSS_ContextParse       --> BSS_CalcFormat["Calculation & Formatting"]:::bill
+                
+                %% Connections from Bill Splitting steps to shared AI Service
+                BSS_DataStruct       -.-> AIService
+                BSS_ContextParse     -.-> AIService
+            end
+        end
+
+        CommandHandlers -- Response --> TelegramInterface
+        MessageHandlers -- Response --> TelegramInterface
     end
 
-    subgraph AI Flow
-        C --> F --> H
-        D --> F --> H
-        H --> I
-        H --> J
-        H --> K
-    end
+    TelegramInterface -- Telegram --> User
 
-    subgraph Memory Flow
-        B --> G --> M
-    end
-
-    subgraph Video Download Flow
-        E --> L
-    end
-
-    B -->|Sends Response| A
+    %% Color Classes
+    classDef main fill:#e3f2fd,stroke:#1976d2,stroke-width:2px,color:#222;
+    classDef ai fill:#ede7f6,stroke:#7b1fa2,stroke-width:2px,color:#222;
+    classDef bill fill:#fff3e0,stroke:#f57c00,stroke-width:2px,color:#222;
+    classDef storage fill:#e8f5e9,stroke:#388e3c,stroke-width:2px,color:#222;
+    classDef video fill:#e0f7fa,stroke:#00838f,stroke-width:2px,color:#222;
 ```
 
----
+### Technology Stack
+- **Core**: Python 3.10+
+- **Telegram Integration**: python-telegram-bot
+- **AI Models**: 
+  - OpenAI API
+  - Groq API (Llama 3)
+  - DeepSeek API
+- **OCR**: Mistral AI
+- **Video Processing**: yt-dlp
+- **Data Validation**: Pydantic
+- **Async Support**: asyncio, aiohttp
 
-## Technology Stack
+## 🚀 Getting Started
 
-- **Python 3.10+**
-- **python-telegram-bot** for Telegram API
-- **OpenAI, Groq, DeepSeek** for AI-powered summarization and Q&A
-- **yt-dlp** for video downloads
-- **Mistral OCR** for receipt image parsing
-- **Pydantic** for robust data validation
+### Prerequisites
+- Python 3.10 or higher
+- Telegram Bot Token
+- API keys for desired AI services
 
----
-
-## Environment Variables
-
-- `BOT_TOKEN` (Telegram Bot Token, required)
-- `OPENAI_API_KEY` (for OpenAI model)
-- `GROQ_API_KEY` (for Groq Llama 3)
-- `DEEPSEEK_API_KEY` (for DeepSeek)
-- `MISTRAL_API_KEY` (for OCR in bill splitting)
-- Optional: `WEBHOOK_URL`, `PORT`, etc.
-
----
-
-## Setup
-
-1. Clone the repository and install dependencies:
+### Installation
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/yourusername/TeleBot.git
+   cd TeleBot
    ```
+
+2. Create and activate virtual environment:
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+   ```
+
+3. Install dependencies:
+   ```bash
    pip install -r requirements.txt
    ```
-2. Set environment variables (see above).
-3. Run the bot:
+
+4. Set up environment variables:
+   ```bash
+   # Required
+   BOT_TOKEN=your_telegram_bot_token
+   
+   # Optional (based on AI models you want to use)
+   OPENAI_API_KEY=your_openai_key
+   GROQ_API_KEY=your_groq_key
+   DEEPSEEK_API_KEY=your_deepseek_key
+   MISTRAL_API_KEY=your_mistral_key
+   
+   # Optional (for webhook deployment)
+   WEBHOOK_URL=your_webhook_url
+   PORT=your_port
    ```
+
+5. Run the bot:
+   ```bash
    python -m bot.main
    ```
 
----
+## 📝 Usage Guide
 
-## Extending
+### Basic Commands
+- `/help` - Show all available commands
+- `/tldr [number]` - Summarize last N messages
+- `/splitbill` - Start bill splitting process
+- `/dl <url>` - Download short-form video
+- `/switch_model <model>` - Change AI model
+- `/cancel` - Cancel current operation
 
-- Add new AI strategies in `bot/services/ai/`.
-- Add new commands in `bot/handlers/command_handlers.py`.
-- For persistent storage, replace `MemoryStorage` with a database-backed implementation.
+### Bill Splitting Flow
+1. Send `/splitbill`
+2. Upload receipt photo
+3. Add caption with payment context
+4. Confirm or cancel the split
 
----
+### Model Switching
+Available models:
+- `openai` - OpenAI's GPT models
+- `groq` - Groq's Llama 3
+- `deepseek` - DeepSeek models
 
-## License
+## 🔧 Development
 
-MIT License
+### Project Structure
+```
+TeleBot/
+├── bot/
+│   ├── config/         # Configuration settings
+│   ├── handlers/       # Command and message handlers
+│   ├── services/       # Core services (AI, Telegram)
+│   ├── utils/          # Utility functions
+│   └── main.py         # Bot entry point
+├── requirements.txt    # Dependencies
+└── README.md          # Documentation
+```
+
+### Extending the Bot
+1. **New Commands**:
+   - Add handler in `bot/handlers/command_handlers.py`
+   - Register in `bot/main.py`
+
+2. **New AI Models**:
+   - Implement strategy in `bot/services/ai/`
+   - Add to strategy registry
+
+3. **Persistent Storage**:
+   - Replace `MemoryStorage` with database implementation
+   - Update storage interface
+
+## 🤝 Contributing
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## 📄 License
+This project is licensed under the MIT License - see the LICENSE file for details.
