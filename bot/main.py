@@ -106,10 +106,11 @@ class Bot:
         if isinstance(current_handlers, list): # Check if handlers is a list
              for handler in current_handlers:
                 if isinstance(handler, ConversationHandler):
-                    current_state = await handler.handle_update(update, context.application, check_result=None, context=context) # check_result=None avoids executing the handler, just gets state
-                    if current_state != ConversationHandler.END:
-                          logger.debug(f"Message from user {update.effective_user.id} ignored by storage (in conversation state {current_state}).")
-                          return # Don't store messages while in an active conversation
+                    # Check conversation state using context.user_data
+                    user_state = context.user_data.get('conversation_state')
+                    if user_state and user_state != ConversationHandler.END:
+                        logger.debug(f"Message from user {update.effective_user.id} ignored by storage (in conversation state {user_state}).")
+                        return # Don't store messages while in an active conversation
 
         # If not in a conversation, proceed to store
         chat_id = update.effective_chat.id
