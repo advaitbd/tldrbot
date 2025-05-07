@@ -12,15 +12,20 @@ class StrategyRegistry:
         cls._strategies[name] = strategy
 
     @classmethod
+    @classmethod
     def get_strategy(cls, name: str) -> AIModelStrategy:
-        return cls._strategies.get(name)
+        strategy = cls._strategies.get(name)
+        if strategy is None:
+            raise ValueError(f"Strategy '{name}' not found.")
+        return strategy
 
     @classmethod
     def available_strategies(cls) -> list[str]:
         return list(cls._strategies.keys())
 
 # Register strategies with their respective API keys and models
-StrategyRegistry.register_strategy("openai", OpenAIStrategy(OpenAIConfig.API_KEY, OpenAIConfig.MODEL))
-StrategyRegistry.register_strategy("groq", GroqAIStrategy(GroqAIConfig.API_KEY, GroqAIConfig.MODEL))
-StrategyRegistry.register_strategy("deepseek", DeepSeekStrategy(DeepSeekAIConfig.API_KEY, DeepSeekAIConfig.MODEL))
-
+api_key = OpenAIConfig.API_KEY or ""
+model = OpenAIConfig.MODEL or ""
+StrategyRegistry.register_strategy("openai", OpenAIStrategy(api_key, model))
+StrategyRegistry.register_strategy("groq", GroqAIStrategy(GroqAIConfig.API_KEY or "", GroqAIConfig.MODEL or ""))
+StrategyRegistry.register_strategy("deepseek", DeepSeekStrategy(DeepSeekAIConfig.API_KEY or "", DeepSeekAIConfig.MODEL or ""))

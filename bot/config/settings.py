@@ -11,23 +11,23 @@ if missing_vars:
 
 @dataclass
 class TelegramConfig:
-    BOT_TOKEN: str = os.environ.get("BOT_TOKEN")
+    BOT_TOKEN: str | None = os.environ.get("BOT_TOKEN")
     PORT: int = int(os.environ.get("PORT", "5000"))
-    WEBHOOK_URL: str = os.environ.get("WEBHOOK_URL")
+    WEBHOOK_URL: str | None = os.environ.get("WEBHOOK_URL")
 
 @dataclass
 class OpenAIConfig:
-    API_KEY: str = os.environ.get("OPENAI_API_KEY")
-    MODEL: str = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+    API_KEY: str | None = os.environ.get("OPENAI_API_KEY")
+    MODEL: str | None = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
 
 @dataclass
 class GroqAIConfig:
-    API_KEY: str = os.environ.get("GROQ_API_KEY")
+    API_KEY: str | None = os.environ.get("GROQ_API_KEY")
     MODEL: str = os.environ.get("GROQ_MODEL", "llama3-8b-8192")
 
 @dataclass
 class DeepSeekAIConfig:
-    API_KEY: str = os.environ.get("DEEPSEEK_API_KEY")
+    API_KEY: str | None = os.environ.get("DEEPSEEK_API_KEY")
     MODEL: str = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
 
 @dataclass

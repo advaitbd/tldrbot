@@ -46,43 +46,45 @@ class Bot:
         return application
 
     def _register_handlers(self, application):
-        # Command handlers
-        application.add_handler(CommandHandler("help", self.command_handlers.help_command))
-        application.add_handler(CommandHandler("tldr", self.command_handlers.summarize))
-        application.add_handler(CommandHandler("dl", self.telegram_service.download_tiktok))
-        application.add_handler(CommandHandler("switch_model", self.command_handlers.switch_model))
-        # Bill splitting conversation (receipt + confirmation)
-        split_conv = ConversationHandler(
-            entry_points=[CommandHandler("splitbill", self.command_handlers.split_bill_start)],
-            states={
-                RECEIPT_IMAGE: [MessageHandler(filters.PHOTO & filters.Caption(),
-                                               self.command_handlers.split_bill_photo_with_context)],
-                CONFIRMATION: [
-                    MessageHandler(filters.Regex("(?i)^(confirm|✅)$"),
-                                   self.command_handlers.split_bill_confirm),
-                    MessageHandler(filters.Regex("(?i)^(cancel|no)$"),
-                                   self.command_handlers.split_bill_cancel),
-                ],
-            },
-            fallbacks=[CommandHandler("cancel", self.command_handlers.split_bill_cancel)],
-            per_user=True,
-            per_chat=True,
-        )
-        application.add_handler(split_conv)
-        # Message handlers
-        application.add_handler(MessageHandler(
-            filters.REPLY & ~filters.COMMAND, # Ensure it's not a command reply
-            self.message_handlers.handle_reply
-        ))
+            # Command handlers
+            application.add_handler(CommandHandler("help", self.command_handlers.help_command))
+            application.add_handler(CommandHandler("tldr", self.command_handlers.summarize))
+            application.add_handler(CommandHandler("dl", self.telegram_service.download_tiktok))
+            application.add_handler(CommandHandler("switch_model", self.command_handlers.switch_model))
+            # Bill splitting conversation (receipt + confirmation)
+            split_conv = ConversationHandler(
+                entry_points=[CommandHandler("splitbill", self.command_handlers.split_bill_start)],
+                states={
+                    RECEIPT_IMAGE: [MessageHandler(filters.PHOTO & filters.Caption(),
+                                                   self.command_handlers.split_bill_photo_with_context)],
+                    CONFIRMATION: [
+                        MessageHandler(filters.Regex("(?i)^(confirm|✅)$"),
+                                       self.command_handlers.split_bill_confirm),
+                        MessageHandler(filters.Regex("(?i)^(cancel|no)$"),
+                                       self.command_handlers.split_bill_cancel),
+                    ],
+                },
+                fallbacks=[CommandHandler("cancel", self.command_handlers.split_bill_cancel)],
+                per_user=True,
+                per_chat=True,
+            )
+            application.add_handler(split_conv)
+            # Message handlers
+            # Only add if reply_handler exists (diagnostic fix)
+            if hasattr(self.message_handlers, "handle_reply") and callable(getattr(self.message_handlers, "handle_reply", None)):
+                application.add_handler(MessageHandler(
+                    filters.REPLY & ~filters.COMMAND,  # Ensure it's not a command reply
+                    self.message_handlers.handle_reply
+                ))
 
-        # Inline query handler
-        application.add_handler(InlineQueryHandler(self.command_handlers.inline_query))
+            # Inline query handler
+            application.add_handler(InlineQueryHandler(self.command_handlers.inline_query))
 
-        # Message storage handler (ensure it doesn't interfere with conversation text)
-        # We only want to store general chat messages, not context replies in the conversation
-        application.add_handler(MessageHandler(
-            filters.TEXT & ~filters.COMMAND & (~filters.UpdateType.EDITED_MESSAGE), # Added filter for edited msg
-            self._store_in_memory), group=1) # Use a group to ensure it runs after conv handler maybe? Or rely on conv handler stopping propagation.
+            # Message storage handler (ensure it doesn't interfere with conversation text)
+            # We only want to store general chat messages, not context replies in the conversation
+            application.add_handler(MessageHandler(
+                filters.TEXT & ~filters.COMMAND & (~filters.UpdateType.EDITED_MESSAGE),  # Added filter for edited msg
+                self._store_in_memory), group=1)  # Use a group to ensure it runs after conv handler maybe? Or rely on conv handler stopping propagation.
 
 
     async def _setup_commands(self, application):
@@ -132,11 +134,13 @@ def main():
     application = bot.setup()
 
     if TelegramConfig.WEBHOOK_URL:
+        # Ensure BOT_TOKEN is a string (not None) for url_path
+        url_path = TelegramConfig.BOT_TOKEN if TelegramConfig.BOT_TOKEN is not None else ""
         application.run_webhook(
             listen="0.0.0.0",
             port=TelegramConfig.PORT,
-            url_path=TelegramConfig.BOT_TOKEN,
-            webhook_url=f"{TelegramConfig.WEBHOOK_URL}{TelegramConfig.BOT_TOKEN}",
+            url_path=url_path,
+            webhook_url=f"{TelegramConfig.WEBHOOK_URL}{url_path}",
         )
         logger.info("Application running via webhook")
     else:
