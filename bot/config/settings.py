@@ -37,3 +37,7 @@ class CensorConfig:
 @dataclass
 class DatabaseConfig:
     DATABASE_URL: str | None = os.environ.get("DATABASE_URL")
+
+@dataclass
+class RedisConfig:
+    URL: str = os.environ.get("REDIS_URL")

@@ -22,6 +22,7 @@ from services.bill_splitter import (
     ReceiptData # Import ReceiptData for type hinting if needed
 )
 from io import BytesIO
+from services.redis_queue import RedisQueue
 
 logger = logging.getLogger(__name__)
 
@@ -29,9 +30,10 @@ logger = logging.getLogger(__name__)
 RECEIPT_IMAGE, CONFIRMATION = range(2)
 
 class CommandHandlers:
-    def __init__(self, memory_storage: MemoryStorage):
+    def __init__(self, memory_storage: MemoryStorage, redis_queue: RedisQueue = None):
         self.memory_storage = memory_storage
         self.ai_service = AIService(StrategyRegistry.get_strategy("deepseek"))
+        self.redis_queue = redis_queue or RedisQueue()
 
     async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         # --- Analytics logging ---
@@ -83,7 +85,6 @@ class CommandHandlers:
         )
         # --- End analytics logging ---
 
-        # Defensive: check for chat and message
         if not update.effective_chat or not hasattr(update.effective_chat, "id"):
             logger.error("No effective_chat or chat id found in update.")
             if update.message:
@@ -98,49 +99,32 @@ class CommandHandlers:
                 await update.message.reply_text("Invalid message count")
             return
 
-        response = None
-        try:
-            memory_storage = self.memory_storage
-            messages_list = memory_storage.get_recent_messages(chat_id, num_messages)
-            combined_text = "\n".join(messages_list)
-            summary = self._create_summary_prompt(combined_text)
-            response = self.ai_service.get_response(summary)
-            if response is None:
-                raise ValueError("AI service returned no summary response.")
+        memory_storage = self.memory_storage
+        messages_list = memory_storage.get_recent_messages(chat_id, num_messages)
+        combined_text = "\n".join(messages_list)
+        summary_prompt = self._create_summary_prompt(combined_text)
 
-            # Defensive: get user name as string
-            user_name = None
-            if update.effective_user:
-                user_name = getattr(update.effective_user, "full_name", None) or getattr(update.effective_user, "username", None) or str(update.effective_user)
-            else:
-                user_name = "User"
+        # Enqueue the LLM job in Redis
+        job_data = {
+            "type": "tldr",
+            "chat_id": chat_id,
+            "user_id": user.id if user else None,
+            "prompt": summary_prompt,
+            "num_messages": num_messages,
+            "original_messages": messages_list,
+        }
+        await self.redis_queue.enqueue(job_data)
 
-            formatted_summary = self._format_summary(str(response), user_name, num_messages)
+        # Immediately reply to user
+        if update.message:
+            await update.message.reply_text("Summarizing... I'll send the summary here when it's ready! 📝")
+        else:
+            await context.bot.send_message(chat_id=chat_id, text="Summarizing... I'll send the summary here when it's ready! 📝")
 
-            # Defensive: ensure chat_data exists
-            if not hasattr(context, "chat_data") or context.chat_data is None:
-                context.chat_data = {}
-
-            summary_message = await context.bot.send_message(
-                chat_id=chat_id,
-                text=formatted_summary,
-                parse_mode="MarkdownV2",
-                disable_web_page_preview=True,
-            )
-
-            # Store context for follow-up questions
-            context.chat_data['summary_message_id'] = summary_message.message_id
-            context.chat_data['original_messages'] = messages_list
-
-        except Exception as e:
-            logger.error(f"Message formatting error: {str(e)}")
-            # Fallback to plain text if markdown parsing fails
-            fallback_text = str(response) if response is not None else "Sorry, I couldn't generate a summary."
-            await context.bot.send_message(
-                chat_id=chat_id,
-                text=fallback_text,
-                disable_web_page_preview=True,
-            )
+        # Optionally: store job info in context for tracking
+        if not hasattr(context, "chat_data") or context.chat_data is None:
+            context.chat_data = {}
+        context.chat_data['pending_tldr'] = True
 
     async def switch_model(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         # --- Analytics logging ---
@@ -371,7 +355,7 @@ class CommandHandlers:
             }
 
             # Build confirmation summary
-            lines = ["I’ve parsed your receipt as follows:"]
+            lines = ["I've parsed your receipt as follows:"]
             # Assigned items per person
             for person, items in assignments.items():
                 item_names = ", ".join(item.name for item in items)

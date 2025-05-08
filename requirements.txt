@@ -45,3 +45,4 @@ websockets==15.0.1
 yarl==1.20.0
 yt-dlp==2024.10.22
 zope.interface==7.2
+redis>=5.0.0

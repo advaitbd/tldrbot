@@ -15,8 +15,10 @@ from config.settings import TelegramConfig
 from handlers.command_handlers import CommandHandlers, RECEIPT_IMAGE, CONFIRMATION # Import states
 from handlers.message_handlers import MessageHandlers
 from services.telegram_service import TelegramService
+from services.redis_queue import RedisQueue
 import re
 from utils.analytics_storage import create_tables  # <-- NEW
+import json
 
 # Configure logging
 logging.basicConfig(
@@ -30,7 +32,9 @@ class Bot:
         self.message_handlers = MessageHandlers()
         self.telegram_service = TelegramService()
         self.memory_storage = MemoryStorage(max_messages=400)
-        self.command_handlers = CommandHandlers(self.memory_storage)
+        self.redis_queue = RedisQueue()
+        self.command_handlers = CommandHandlers(self.memory_storage, redis_queue=self.redis_queue)
+        self._worker_task = None
 
     def setup(self):
         if not TelegramConfig.BOT_TOKEN:
@@ -43,6 +47,11 @@ class Bot:
 
         # Register post-init callback to set up commands
         application.post_init = self._setup_commands
+
+        # Start background worker for LLM jobs
+        loop = asyncio.get_event_loop()
+        if not self._worker_task:
+            self._worker_task = loop.create_task(self._llm_worker(application))
 
         return application
 
@@ -129,6 +138,38 @@ class Bot:
         if message_text: # Ensure message has text content
              self.memory_storage.store_message(chat_id, sender_name, message_text)
              logger.debug(f"Stored message from {sender_name} in chat {chat_id}")
+
+    async def _llm_worker(self, application):
+        """Background worker to process LLM jobs from Redis queue."""
+        from telegram.constants import ParseMode
+        ai_service = self.command_handlers.ai_service
+        while True:
+            job = await self.redis_queue.dequeue(timeout=5)
+            if not job:
+                await asyncio.sleep(1)
+                continue
+            if job.get("type") == "tldr":
+                chat_id = job["chat_id"]
+                prompt = job["prompt"]
+                num_messages = job.get("num_messages", 50)
+                user_name = job.get("user_id", "User")
+                original_messages = job.get("original_messages", [])
+                try:
+                    response = ai_service.get_response(prompt)
+                    formatted_summary = self.command_handlers._format_summary(str(response), user_name, num_messages)
+                    await application.bot.send_message(
+                        chat_id=chat_id,
+                        text=formatted_summary,
+                        parse_mode=ParseMode.MARKDOWN_V2,
+                        disable_web_page_preview=True,
+                    )
+                except Exception as e:
+                    logger.error(f"LLM worker error: {e}")
+                    await application.bot.send_message(
+                        chat_id=chat_id,
+                        text="Sorry, I couldn't generate a summary due to an error.",
+                        disable_web_page_preview=True,
+                    )
 
 def main():
     # Ensure analytics table exists before starting the bot
