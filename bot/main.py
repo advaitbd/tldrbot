@@ -16,6 +16,7 @@ from handlers.command_handlers import CommandHandlers, RECEIPT_IMAGE, CONFIRMATI
 from handlers.message_handlers import MessageHandlers
 from services.telegram_service import TelegramService
 import re
+from utils.analytics_storage import create_tables  # <-- NEW
 
 # Configure logging
 logging.basicConfig(
@@ -130,6 +131,8 @@ class Bot:
              logger.debug(f"Stored message from {sender_name} in chat {chat_id}")
 
 def main():
+    # Ensure analytics table exists before starting the bot
+    create_tables()
     bot = Bot()
     application = bot.setup()
 

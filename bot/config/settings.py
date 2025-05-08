@@ -33,3 +33,7 @@ class DeepSeekAIConfig:
 @dataclass
 class CensorConfig:
     WORDS: str = os.environ.get("CENSOR", "")
+
+@dataclass
+class DatabaseConfig:
+    DATABASE_URL: str | None = os.environ.get("DATABASE_URL")
