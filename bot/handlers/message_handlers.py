@@ -18,6 +18,10 @@ class MessageHandlers:
         if not self._is_valid_reply(update, context):
             return
 
+        if update.message is None or update.message.text is None:
+            logger.error("No message or message text found in update")
+            return
+
         question = update.message.text
         if context.chat_data is None:
             context.chat_data = {}
@@ -31,7 +35,8 @@ class MessageHandlers:
 
         formatted_answer = self.text_processor.escape_markdown(answer)
         if update.effective_chat is None:
-            return ValueError("Effective Chat is None")
+            logger.error("Effective Chat is None")
+            return
 
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
@@ -42,14 +47,14 @@ class MessageHandlers:
 
     @staticmethod
     def _is_valid_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
-        if not update.message.reply_to_message:
-            return False
+            if update.message is None or update.message.reply_to_message is None:
+                return False
 
-        if context.chat_data is None:
-            context.chat_data = {}
+            if context.chat_data is None:
+                context.chat_data = {}
 
-        summary_message_id = context.chat_data.get('summary_message_id')
-        return update.message.reply_to_message.message_id == summary_message_id
+            summary_message_id = context.chat_data.get('summary_message_id')
+            return update.message.reply_to_message.message_id == summary_message_id
 
     @staticmethod
     def _create_qa_prompt(messages: List[str], question: str) -> str:

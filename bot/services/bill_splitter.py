@@ -122,7 +122,7 @@ async def extract_receipt_data_from_image(image_bytes: bytes) -> ReceiptData | N
         logger.error(f"Mistral OCR error: {e}")
         return None
 
-    if not ocr_text.strip():
+    if not ocr_text or not isinstance(ocr_text, str) or not ocr_text.strip():
         logger.error("Mistral OCR returned empty text.")
         return None
 
@@ -167,11 +167,16 @@ async def extract_receipt_data_from_image(image_bytes: bytes) -> ReceiptData | N
         logger.info("Received response from LLM for OCR structuring.")
 
         # Remove markdown code block if present
-        llm_response_str = llm_response.strip()
-        if llm_response_str.startswith("```json"):
-            llm_response_str = llm_response_str[7:-3].strip()
-        elif llm_response_str.startswith("```"):
-            llm_response_str = llm_response_str[3:-3].strip()
+        llm_response_str = llm_response
+        if llm_response_str is not None:
+            llm_response_str = llm_response_str.strip()
+            if llm_response_str.startswith("```json"):
+                llm_response_str = llm_response_str[7:-3].strip()
+            elif llm_response_str.startswith("```"):
+                llm_response_str = llm_response_str[3:-3].strip()
+        else:
+            logger.error("LLM response is None.")
+            return None
 
         extracted_json = json.loads(llm_response_str)
         logger.info(f"Raw JSON extracted from LLM: {json.dumps(extracted_json, indent=2)}")
@@ -563,27 +568,38 @@ def format_split_results(
 # Example Usage (Conceptual - requires actual context, update, AIService etc.)
 async def handle_bill_split_request(update: Update, context: ContextTypes.DEFAULT_TYPE, image_bytes: bytes, user_message: str):
     """Conceptual handler function"""
-    await update.message.reply_text("Processing receipt image...")
+    # Defensive: Ensure update.message exists before using reply_text
+    message = getattr(update, "message", None)
+    if message is None:
+        # Try to get from update.effective_message (for CallbackQuery, etc.)
+        message = getattr(update, "effective_message", None)
+    if message is None:
+        # Cannot reply, log and abort
+        import logging
+        logging.error("No message object found in update; cannot reply to user.")
+        return
+
+    await message.reply_text("Processing receipt image...")
 
     receipt_data = await extract_receipt_data_from_image(image_bytes)
 
     if not receipt_data:
-        await update.message.reply_text("Sorry, I couldn't extract data from the receipt image.")
+        await message.reply_text("Sorry, I couldn't extract data from the receipt image.")
         return
 
     if not receipt_data.items:
-        await update.message.reply_text("Could not find any items on the receipt to split.")
+        await message.reply_text("Could not find any items on the receipt to split.")
         return
 
     # Get AIService instance (assuming it's stored in bot_data or user_data)
     ai_service = context.bot_data.get("ai_service") # Example way to get it
     if not ai_service:
-         await update.message.reply_text("AI Service is not available for context parsing.")
-         # Fallback: Maybe ask user to assign items manually?
-         # For now, just return.
-         return
+        await message.reply_text("AI Service is not available for context parsing.")
+        # Fallback: Maybe ask user to assign items manually?
+        # For now, just return.
+        return
 
-    await update.message.reply_text("Analyzing who paid for what based on your message...")
+    await message.reply_text("Analyzing who paid for what based on your message...")
 
     parse_result = parse_payment_context_with_llm(
         context_text=user_message,
@@ -592,19 +608,19 @@ async def handle_bill_split_request(update: Update, context: ContextTypes.DEFAUL
     )
 
     if isinstance(parse_result, str): # Check if an error message string was returned
-        await update.message.reply_text(f"Error during context analysis: {parse_result}")
+        await message.reply_text(f"Error during context analysis: {parse_result}")
         return
 
     assignments, shared_items, participants = parse_result
 
     # If LLM parsing failed to find participants but items exist, prompt user?
     if not participants and (assignments or shared_items):
-         # This case needs specific handling - maybe ask "Who is splitting this bill?"
-         await update.message.reply_text("I found items but couldn't figure out who is splitting the bill from the message. Please list the names of everyone involved.")
-         # Store state and wait for user response? Or abort.
-         return # Abort for now
+        # This case needs specific handling - maybe ask "Who is splitting this bill?"
+        await message.reply_text("I found items but couldn't figure out who is splitting the bill from the message. Please list the names of everyone involved.")
+        # Store state and wait for user response? Or abort.
+        return # Abort for now
 
-    await update.message.reply_text("Calculating the split...")
+    await message.reply_text("Calculating the split...")
 
     split_calculation = calculate_split(
         assignments=assignments,
@@ -616,7 +632,7 @@ async def handle_bill_split_request(update: Update, context: ContextTypes.DEFAUL
     )
 
     if isinstance(split_calculation, str): # Check if calculation returned an error string
-        await update.message.reply_text(f"Error during calculation: {split_calculation}")
+        await message.reply_text(f"Error during calculation: {split_calculation}")
         return
 
     # Format and send the final result
@@ -628,4 +644,4 @@ async def handle_bill_split_request(update: Update, context: ContextTypes.DEFAUL
     )
 
     # Ensure the Telegram sending function uses ParseMode.MARKDOWN_V2
-    await update.message.reply_text(final_message, parse_mode='MarkdownV2')
+    await message.reply_text(final_message, parse_mode='MarkdownV2')
