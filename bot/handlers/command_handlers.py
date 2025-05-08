@@ -34,158 +34,164 @@ class CommandHandlers:
         self.ai_service = AIService(StrategyRegistry.get_strategy("deepseek"))
 
     async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        # --- Analytics logging ---
-        user = update.effective_user
-        chat = update.effective_chat
-        log_user_event(
-            user_id=user.id if user else None,
-            chat_id=chat.id if chat else None,
-            event_type="help_command",
-            username=getattr(user, "username", None),
-            first_name=getattr(user, "first_name", None),
-            last_name=getattr(user, "last_name", None),
-        )
-        # --- End analytics logging ---
+            # --- Analytics logging ---
+            user = update.effective_user
+            chat = update.effective_chat
+            # Defensive: Only log if user and chat are present (fix type errors)
+            if user is not None and chat is not None:
+                log_user_event(
+                    user_id=user.id,
+                    chat_id=chat.id,
+                    event_type="help_command",
+                    username=getattr(user, "username", None),
+                    first_name=getattr(user, "first_name", None),
+                    last_name=getattr(user, "last_name", None),
+                )
+            # --- End analytics logging ---
 
-        help_text = (
-            "🤖 *Welcome to TLDR Bot!* 🤖\n\n"
-            "I help you summarize conversations and provide insights. Here's what I can do:\n\n"
-            "*Commands:*\n"
-            "• `/tldr [number]` — Summarize the last [number] messages (default: 50)\n"
-            "• `/dl [URL]` — Download TikToks, Reels, Shorts, etc. (WIP: might not work sometimes)\n"
-            "• `/switch_model [model]` — Change the AI model\n"
-            "\n*Available Models:*\n"
-            "• `groq` — Uses Llama 3 (8bn) hosted by groq\n"
-            "• `deepseek` — DeepSeek V3\n"
-            "\n*Features:*\n"
-            "• Reply to my summaries with questions for more insights\n"
-            "• View sentiment analysis in summaries\n"
-            "• Get key events extracted from conversations\n"
-            "\n*Current model:* " + str(self.ai_service.get_current_model())
-        )
+            help_text = (
+                "🤖 *Welcome to TLDR Bot!* 🤖\n\n"
+                "I help you summarize conversations and provide insights. Here's what I can do:\n\n"
+                "*Commands:*\n"
+                "• `/tldr [number]` — Summarize the last [number] messages (default: 50)\n"
+                "• `/dl [URL]` — Download TikToks, Reels, Shorts, etc. (WIP: might not work sometimes)\n"
+                "• `/switch_model [model]` — Change the AI model\n"
+                "\n*Available Models:*\n"
+                "• `groq` — Uses Llama 3 (8bn) hosted by groq\n"
+                "• `deepseek` — DeepSeek V3\n"
+                "\n*Features:*\n"
+                "• Reply to my summaries with questions for more insights\n"
+                "• View sentiment analysis in summaries\n"
+                "• Get key events extracted from conversations\n"
+                "\n*Current model:* " + str(self.ai_service.get_current_model())
+            )
 
-        if update.message:
-            await update.message.reply_text(help_text, parse_mode="Markdown")
-        else:
-            logger.warning("No message found in update for help_command.")
+            if update.message:
+                await update.message.reply_text(help_text, parse_mode="Markdown")
+            else:
+                logger.warning("No message found in update for help_command.")
 
     async def summarize(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        # --- Analytics logging ---
-        user = update.effective_user
-        chat = update.effective_chat
-        log_user_event(
-            user_id=user.id if user else None,
-            chat_id=chat.id if chat else None,
-            event_type="summarize_command",
-            username=getattr(user, "username", None),
-            first_name=getattr(user, "first_name", None),
-            last_name=getattr(user, "last_name", None),
-        )
-        # --- End analytics logging ---
+            # --- Analytics logging ---
+            user = update.effective_user
+            chat = update.effective_chat
+            # Fix diagnostics: Only log if user and chat are present (user.id and chat.id are required ints)
+            if user is not None and chat is not None:
+                log_user_event(
+                    user_id=user.id,
+                    chat_id=chat.id,
+                    event_type="summarize_command",
+                    username=getattr(user, "username", None),
+                    first_name=getattr(user, "first_name", None),
+                    last_name=getattr(user, "last_name", None),
+                )
+            # --- End analytics logging ---
 
-        # Defensive: check for chat and message
-        if not update.effective_chat or not hasattr(update.effective_chat, "id"):
-            logger.error("No effective_chat or chat id found in update.")
-            if update.message:
-                await update.message.reply_text("Could not determine chat context.")
-            return
+            # Defensive: check for chat and message
+            if not update.effective_chat or not hasattr(update.effective_chat, "id"):
+                logger.error("No effective_chat or chat id found in update.")
+                if update.message:
+                    await update.message.reply_text("Could not determine chat context.")
+                return
 
-        chat_id = update.effective_chat.id
-        num_messages = self._parse_message_count(getattr(context, "args", None), default=50, max_limit=400)
+            chat_id = update.effective_chat.id
+            num_messages = self._parse_message_count(getattr(context, "args", None), default=50, max_limit=400)
 
-        if not num_messages:
-            if update.message:
-                await update.message.reply_text("Invalid message count")
-            return
+            if not num_messages:
+                if update.message:
+                    await update.message.reply_text("Invalid message count")
+                return
 
-        response = None
-        try:
-            memory_storage = self.memory_storage
-            messages_list = memory_storage.get_recent_messages(chat_id, num_messages)
-            combined_text = "\n".join(messages_list)
-            summary = self._create_summary_prompt(combined_text)
-            response = self.ai_service.get_response(summary)
-            if response is None:
-                raise ValueError("AI service returned no summary response.")
+            response = None
+            try:
+                memory_storage = self.memory_storage
+                messages_list = memory_storage.get_recent_messages(chat_id, num_messages)
+                combined_text = "\n".join(messages_list)
+                summary = self._create_summary_prompt(combined_text)
+                response = self.ai_service.get_response(summary)
+                if response is None:
+                    raise ValueError("AI service returned no summary response.")
 
-            # Defensive: get user name as string
-            user_name = None
-            if update.effective_user:
-                user_name = getattr(update.effective_user, "full_name", None) or getattr(update.effective_user, "username", None) or str(update.effective_user)
-            else:
-                user_name = "User"
+                # Defensive: get user name as string
+                user_name = None
+                if update.effective_user:
+                    user_name = getattr(update.effective_user, "full_name", None) or getattr(update.effective_user, "username", None) or str(update.effective_user)
+                else:
+                    user_name = "User"
 
-            formatted_summary = self._format_summary(str(response), user_name, num_messages)
+                formatted_summary = self._format_summary(str(response), user_name, num_messages)
 
-            # Defensive: ensure chat_data exists
-            if not hasattr(context, "chat_data") or context.chat_data is None:
-                context.chat_data = {}
+                # Defensive: ensure chat_data exists
+                if not hasattr(context, "chat_data") or context.chat_data is None:
+                    context.chat_data = {}
 
-            summary_message = await context.bot.send_message(
-                chat_id=chat_id,
-                text=formatted_summary,
-                parse_mode="MarkdownV2",
-                disable_web_page_preview=True,
-            )
+                summary_message = await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=formatted_summary,
+                    parse_mode="MarkdownV2",
+                    disable_web_page_preview=True,
+                )
 
-            # Store context for follow-up questions
-            context.chat_data['summary_message_id'] = summary_message.message_id
-            context.chat_data['original_messages'] = messages_list
+                # Store context for follow-up questions
+                context.chat_data['summary_message_id'] = summary_message.message_id
+                context.chat_data['original_messages'] = messages_list
 
-        except Exception as e:
-            logger.error(f"Message formatting error: {str(e)}")
-            # Fallback to plain text if markdown parsing fails
-            fallback_text = str(response) if response is not None else "Sorry, I couldn't generate a summary."
-            await context.bot.send_message(
-                chat_id=chat_id,
-                text=fallback_text,
-                disable_web_page_preview=True,
-            )
+            except Exception as e:
+                logger.error(f"Message formatting error: {str(e)}")
+                # Fallback to plain text if markdown parsing fails
+                fallback_text = str(response) if response is not None else "Sorry, I couldn't generate a summary."
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=fallback_text,
+                    disable_web_page_preview=True,
+                )
 
     async def switch_model(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        # --- Analytics logging ---
-        user = update.effective_user
-        chat = update.effective_chat
-        log_user_event(
-            user_id=user.id if user else None,
-            chat_id=chat.id if chat else None,
-            event_type="switch_model_command",
-            username=getattr(user, "username", None),
-            first_name=getattr(user, "first_name", None),
-            last_name=getattr(user, "last_name", None),
-        )
-        # --- End analytics logging ---
+            # --- Analytics logging ---
+            user = update.effective_user
+            chat = update.effective_chat
+            # Defensive: Only log if user and chat are present (fix type errors)
+            if user is not None and chat is not None:
+                log_user_event(
+                    user_id=user.id,
+                    chat_id=chat.id,
+                    event_type="switch_model_command",
+                    username=getattr(user, "username", None),
+                    first_name=getattr(user, "first_name", None),
+                    last_name=getattr(user, "last_name", None),
+                )
+            # --- End analytics logging ---
 
-        # Defensive: check if update.message exists before calling reply_text
-        async def safe_reply(text):
-            if update.message:
-                return await update.message.reply_text(text)
-            elif update.effective_chat:
-                # Fallback: send message to chat if possible
-                return await context.bot.send_message(chat_id=update.effective_chat.id, text=text)
-            else:
-                logger.warning("No message or chat found in update for switch_model.")
-                return None
+            # Defensive: check if update.message exists before calling reply_text
+            async def safe_reply(text):
+                if update.message:
+                    return await update.message.reply_text(text)
+                elif update.effective_chat:
+                    # Fallback: send message to chat if possible
+                    return await context.bot.send_message(chat_id=update.effective_chat.id, text=text)
+                else:
+                    logger.warning("No message or chat found in update for switch_model.")
+                    return None
 
-        if not context.args:
-            await safe_reply("Please provide a model name.")
-            return
+            if not context.args:
+                await safe_reply("Please provide a model name.")
+                return
 
-        new_model = context.args[0]
+            new_model = context.args[0]
 
-        available_models = StrategyRegistry.available_strategies()
-        if new_model not in available_models:
-            await safe_reply(f"Invalid model name. Available models: {', '.join(available_models)}")
-            return
+            available_models = StrategyRegistry.available_strategies()
+            if new_model not in available_models:
+                await safe_reply(f"Invalid model name. Available models: {', '.join(available_models)}")
+                return
 
-        try:
-            strategy = StrategyRegistry.get_strategy(new_model)
-            self.ai_service.set_strategy(strategy)
-            await safe_reply(f"Model switched to {new_model}")
+            try:
+                strategy = StrategyRegistry.get_strategy(new_model)
+                self.ai_service.set_strategy(strategy)
+                await safe_reply(f"Model switched to {new_model}")
 
-        except Exception as e:
-            logger.error(f"Error switching model: {str(e)}")
-            await safe_reply(f"Failed to switch model: {str(e)}")
+            except Exception as e:
+                logger.error(f"Error switching model: {str(e)}")
+                await safe_reply(f"Failed to switch model: {str(e)}")
 
     async def inline_query(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
             """Handle inline queries."""
@@ -243,49 +249,51 @@ class CommandHandlers:
     # --- Bill Splitting Conversation Handlers ---
 
     async def split_bill_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        # --- Analytics logging ---
-        user = update.effective_user
-        chat = update.effective_chat
-        log_user_event(
-            user_id=user.id if user else None,
-            chat_id=chat.id if chat else None,
-            event_type="split_bill_start",
-            username=getattr(user, "username", None),
-            first_name=getattr(user, "first_name", None),
-            last_name=getattr(user, "last_name", None),
-        )
-        # --- End analytics logging ---
+            # --- Analytics logging ---
+            user = update.effective_user
+            chat = update.effective_chat
+            # Defensive: Only log if user and chat are present (fix type errors)
+            if user is not None and chat is not None:
+                log_user_event(
+                    user_id=user.id,
+                    chat_id=chat.id,
+                    event_type="split_bill_start",
+                    username=getattr(user, "username", None),
+                    first_name=getattr(user, "first_name", None),
+                    last_name=getattr(user, "last_name", None),
+                )
+            # --- End analytics logging ---
 
-        """
-        Entry point for bill splitting: ask user to send receipt photo with caption.
-        """
-        # Defensive: check if update.message exists before calling reply_text
-        if update.message:
-            await update.message.reply_text(
-                "To split a bill, send a photo of the receipt *with a caption* describing who paid for what.\n\n"
-                "Example caption:\n"
-                "Alice: Burger, Fries\n"
-                "Bob: Salad\n"
-                "Shared: Drinks\n\n"
-                "(Make sure item names in your caption roughly match the receipt.)",
-                parse_mode="Markdown"
-            )
-        else:
-            # Fallback: send message to chat if possible
-            if update.effective_chat:
-                await context.bot.send_message(
-                    chat_id=update.effective_chat.id,
-                    text=(
-                        "To split a bill, send a photo of the receipt *with a caption* describing who paid for what.\n\n"
-                        "Example caption:\n"
-                        "Alice: Burger, Fries\n"
-                        "Bob: Salad\n"
-                        "Shared: Drinks\n\n"
-                        "(Make sure item names in your caption roughly match the receipt.)"
-                    ),
+            """
+            Entry point for bill splitting: ask user to send receipt photo with caption.
+            """
+            # Defensive: check if update.message exists before calling reply_text
+            if update.message:
+                await update.message.reply_text(
+                    "To split a bill, send a photo of the receipt *with a caption* describing who paid for what.\n\n"
+                    "Example caption:\n"
+                    "Alice: Burger, Fries\n"
+                    "Bob: Salad\n"
+                    "Shared: Drinks\n\n"
+                    "(Make sure item names in your caption roughly match the receipt.)",
                     parse_mode="Markdown"
                 )
-        return RECEIPT_IMAGE
+            else:
+                # Fallback: send message to chat if possible
+                if update.effective_chat:
+                    await context.bot.send_message(
+                        chat_id=update.effective_chat.id,
+                        text=(
+                            "To split a bill, send a photo of the receipt *with a caption* describing who paid for what.\n\n"
+                            "Example caption:\n"
+                            "Alice: Burger, Fries\n"
+                            "Bob: Salad\n"
+                            "Shared: Drinks\n\n"
+                            "(Make sure item names in your caption roughly match the receipt.)"
+                        ),
+                        parse_mode="Markdown"
+                    )
+            return RECEIPT_IMAGE
 
     async def split_bill_photo_with_context(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Defensive: check if update.message exists before accessing its attributes
