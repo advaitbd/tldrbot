@@ -82,78 +82,6 @@ A powerful Telegram bot that enhances group productivity through AI-powered conv
      - Error handling and recovery
      - User-friendly result formatting
 
-### System Flow
-
-```mermaid
-graph TD
-    User["User"] -- Telegram --> TLDRBotApplication["TLDRBot"]
-
-    subgraph TLDRBotApplication
-        direction TB
-        TelegramInterface["Telegram API Interface\n(python-telegram-bot)"]:::main
-
-        TelegramInterface --> RequestRouter["Update Router"]:::main
-
-        RequestRouter -- "/command" --> CommandHandlers["Command Handlers"]:::main
-        RequestRouter -- "message" --> MessageHandlers["Message Handlers"]:::main
-
-        subgraph Services["Core Services"]
-            direction LR
-            
-            subgraph MainServices["Main Functionality"]
-                direction TB
-                CommandHandlers --> AIService["AI Service"]:::ai
-                CommandHandlers --> MemoryStorageService["Memory Storage Service"]:::storage
-                CommandHandlers --> VideoDownloadService["Video Download Service"]:::video
-                CommandHandlers --> BillSplittingService["Bill Splitting Service"]:::bill
-
-                MessageHandlers --> AIService
-                MessageHandlers --> MemoryStorageService
-
-                AIService --> AIModels["AI Models\n(OpenAI, Groq, DeepSeek)"]:::ai
-                MemoryStorageService --> InMemoryDataStore["In-Memory Data Store"]:::storage
-                VideoDownloadService --> YTDLP["yt-dlp"]:::video
-            end
-
-            subgraph BillSplittingDetail["Bill Splitting Service Details"]
-                direction TB
-                BillSplittingService   --> BSS_OCR["Receipt OCR"]:::bill
-                BSS_OCR                --> BSS_DataStruct["Data Structuring"]:::bill
-                BSS_DataStruct         --> BSS_ContextParse["Context Parsing"]:::bill
-                BSS_ContextParse       --> BSS_CalcFormat["Calculation & Formatting"]:::bill
-                
-                %% Connections from Bill Splitting steps to shared AI Service
-                BSS_DataStruct       -.-> AIService
-                BSS_ContextParse     -.-> AIService
-            end
-        end
-
-        CommandHandlers -- Response --> TelegramInterface
-        MessageHandlers -- Response --> TelegramInterface
-    end
-
-    TelegramInterface -- Telegram --> User
-
-    %% Color Classes
-    classDef main fill:#e3f2fd,stroke:#1976d2,stroke-width:2px,color:#222;
-    classDef ai fill:#ede7f6,stroke:#7b1fa2,stroke-width:2px,color:#222;
-    classDef bill fill:#fff3e0,stroke:#f57c00,stroke-width:2px,color:#222;
-    classDef storage fill:#e8f5e9,stroke:#388e3c,stroke-width:2px,color:#222;
-    classDef video fill:#e0f7fa,stroke:#00838f,stroke-width:2px,color:#222;
-```
-
-### Technology Stack
-- **Core**: Python 3.10+
-- **Telegram Integration**: python-telegram-bot
-- **AI Models**: 
-  - OpenAI API
-  - Groq API (Llama 3)
-  - DeepSeek API
-- **OCR**: Mistral AI
-- **Video Processing**: yt-dlp
-- **Data Validation**: Pydantic
-- **Async Support**: asyncio, aiohttp
-
 ## 🚀 Getting Started
 
 ### Prerequisites
@@ -255,3 +183,124 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## 📄 License
 This project is licensed under the MIT License - see the LICENSE file for details.
+
+## 🚦 Background Job Queueing with Redis
+
+**LLM-powered commands** (like `/tldr`) are now handled via a Redis-backed job queue for maximum responsiveness and reliability.
+
+- When a user calls `/tldr`, the bot **immediately replies** that the summary is being prepared.
+- The request is **queued in Redis**.
+- A **background worker** (part of the bot process) picks up the job, runs the LLM, and sends the summary as a new message in the chat.
+- This ensures the bot remains responsive, even if the LLM is slow or under heavy load.
+
+#### Sample User Experience
+
+```
+User: /tldr 30
+
+Bot (immediately): Summarizing... I'll send the summary here when it's ready! 📝
+
+Bot (a few seconds later):
+_Conversation summarized for the last 30 messages:_
+Summary: ...
+Sentiment: ...
+Events: ...
+```
+
+## 📊 Analytics & Event Logging
+
+- TLDRBot logs all user interactions and commands to a relational database for analytics and monitoring.
+- Events are stored in a `user_events` table with user, chat, event type, and timestamp.
+- This enables usage tracking, feature analytics, and debugging.
+
+#### Environment Variable
+- `DATABASE_URL` (required): SQLAlchemy-compatible database URL (e.g., for Postgres).
+
+#### Setup
+- The bot will automatically create the required table on startup if it does not exist.
+
+#### Example Table Schema
+
+| Column      | Type         | Description                |
+|-------------|--------------|----------------------------|
+| id          | Integer      | Primary key                |
+| user_id     | BigInteger   | Telegram user ID           |
+| username    | String       | Telegram username          |
+| first_name  | String       | User's first name          |
+| last_name   | String       | User's last name           |
+| chat_id     | BigInteger   | Telegram chat ID           |
+| event_type  | String       | Type of event/command      |
+| timestamp   | DateTime     | When the event occurred    |
+| extra       | Text         | Optional extra data (JSON) |
+
+## 🏗️ System Flow
+
+```mermaid
+graph TD
+    User["User"] -- Telegram --> TLDRBotApplication["TLDRBot"]
+
+    subgraph TLDRBotApplication
+        direction TB
+        TelegramInterface["Telegram API Interface\n(python-telegram-bot)"]:::main
+
+        TelegramInterface --> RequestRouter["Update Router"]:::main
+
+        RequestRouter -- "/command" --> CommandHandlers["Command Handlers"]:::main
+        CommandHandlers -- "LLM Job" --> RedisQueue["Redis Job Queue"]:::queue
+        RedisQueue -- "Job" --> LLMWorker["Background LLM Worker"]:::worker
+        LLMWorker -- "Summary" --> TelegramInterface
+
+        RequestRouter -- "message" --> MessageHandlers["Message Handlers"]:::main
+        MessageHandlers --> AIService
+        MessageHandlers --> MemoryStorageService
+
+        subgraph Services["Core Services"]
+            direction LR
+            AIService --> AIModels["AI Models\n(OpenAI, Groq, DeepSeek)"]:::ai
+            MemoryStorageService --> InMemoryDataStore["In-Memory Data Store"]:::storage
+        end
+
+        CommandHandlers --> MemoryStorageService
+        CommandHandlers --> VideoDownloadService
+        CommandHandlers --> BillSplittingService
+        CommandHandlers -- "Analytics Event" --> AnalyticsDB["Analytics Storage (SQL DB)"]:::analytics
+        MessageHandlers -- "Analytics Event" --> AnalyticsDB
+    end
+
+    TelegramInterface -- Telegram --> User
+
+    %% Color Classes
+    classDef main fill:#e3f2fd,stroke:#1976d2,stroke-width:2px,color:#222;
+    classDef ai fill:#ede7f6,stroke:#7b1fa2,stroke-width:2px,color:#222;
+    classDef queue fill:#fffde7,stroke:#fbc02d,stroke-width:2px,color:#222;
+    classDef worker fill:#e1f5fe,stroke:#0288d1,stroke-width:2px,color:#222;
+    classDef storage fill:#e8f5e9,stroke:#388e3c,stroke-width:2px,color:#222;
+    classDef analytics fill:#f3e5f5,stroke:#8e24aa,stroke-width:2px,color:#222;
+```
+
+## ⚙️ Environment Variables (Updated)
+
+Add to your `.env` or Railway variables:
+
+```
+BOT_TOKEN=your_telegram_bot_token
+OPENAI_API_KEY=your_openai_key
+GROQ_API_KEY=your_groq_key
+DEEPSEEK_API_KEY=your_deepseek_key
+MISTRAL_API_KEY=your_mistral_key
+WEBHOOK_URL=your_webhook_url
+PORT=your_port
+REDIS_URL=redis://<host>:<port>/<db>
+DATABASE_URL=postgresql://user:password@host:port/dbname
+```
+
+- On Railway, `REDIS_URL` is provided by the Redis plugin.
+- `DATABASE_URL` is required for analytics logging (Postgres recommended).
+- Locally, you can use a local Redis instance or a cloud Redis URL.
+
+## 🏁 Getting Started (Updated)
+
+1. **Provision a Redis instance** (e.g., Railway Redis plugin, or local Redis).
+2. **Provision a Postgres (or compatible) database** for analytics.
+3. **Set `REDIS_URL` and `DATABASE_URL`** in your environment.
+4. **Run the bot as before.**
