@@ -104,6 +104,12 @@ class CommandHandlers:
         combined_text = "\n".join(messages_list)
         summary_prompt = self._create_summary_prompt(combined_text)
 
+        # Immediately reply to user
+        if update.message:
+            await update.message.reply_text("Summarizing... I'll send the summary here when it's ready! 📝")
+        else:
+            await context.bot.send_message(chat_id=chat_id, text="Summarizing... I'll send the summary here when it's ready! 📝")
+
         # Enqueue the LLM job in Redis
         job_data = {
             "type": "tldr",
@@ -114,12 +120,6 @@ class CommandHandlers:
             "original_messages": messages_list,
         }
         await self.redis_queue.enqueue(job_data)
-
-        # Immediately reply to user
-        if update.message:
-            await update.message.reply_text("Summarizing... I'll send the summary here when it's ready! 📝")
-        else:
-            await context.bot.send_message(chat_id=chat_id, text="Summarizing... I'll send the summary here when it's ready! 📝")
 
         # Optionally: store job info in context for tracking
         if not hasattr(context, "chat_data") or context.chat_data is None:
