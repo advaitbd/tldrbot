@@ -29,6 +29,7 @@ class UserEvent(Base):
     event_type = Column(String(64), nullable=False)
     timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
     extra = Column(Text, nullable=True)  # For optional JSON or text data
+    llm_name = Column(String(64), nullable=True)  # Name of the LLM used
 
 def create_tables():
     Base.metadata.create_all(bind=engine)
@@ -41,6 +42,7 @@ def log_user_event(
     first_name: Optional[str] = None,
     last_name: Optional[str] = None,
     extra: Optional[str] = None,
+    llm_name: Optional[str] = None,
     session: Optional[Session] = None
 ):
     """Log a user event to the database."""
@@ -57,6 +59,7 @@ def log_user_event(
             first_name=first_name,
             last_name=last_name,
             extra=extra,
+            llm_name=llm_name,
         )
         session.add(event)
         session.commit()

@@ -46,6 +46,7 @@ class CommandHandlers:
             username=getattr(user, "username", None),
             first_name=getattr(user, "first_name", None),
             last_name=getattr(user, "last_name", None),
+            llm_name=self.ai_service.get_current_model(),       
         )
         # --- End analytics logging ---
 
@@ -82,6 +83,7 @@ class CommandHandlers:
             username=getattr(user, "username", None),
             first_name=getattr(user, "first_name", None),
             last_name=getattr(user, "last_name", None),
+            llm_name=self.ai_service.get_current_model(),       
         )
         # --- End analytics logging ---
 
@@ -137,6 +139,7 @@ class CommandHandlers:
             username=getattr(user, "username", None),
             first_name=getattr(user, "first_name", None),
             last_name=getattr(user, "last_name", None),
+            llm_name=self.ai_service.get_current_model(),       
         )
         # --- End analytics logging ---
 
@@ -237,7 +240,8 @@ class CommandHandlers:
             username=getattr(user, "username", None),
             first_name=getattr(user, "first_name", None),
             last_name=getattr(user, "last_name", None),
-        )
+            llm_name=self.ai_service.get_current_model(),       
+        )       
         # --- End analytics logging ---
 
         """
