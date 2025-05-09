@@ -291,29 +291,29 @@ class CommandHandlers:
             logger.warning("No message found in update for list_providers.")
 
     async def inline_query(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-            """Handle inline queries."""
-            if not hasattr(update, "inline_query") or update.inline_query is None:
-                # Defensive: log and return if inline_query is missing
-                logger.warning("No inline_query found in update for inline_query handler.")
-                return
+        """Handle inline queries."""
+        if not hasattr(update, "inline_query") or update.inline_query is None:
+            # Defensive: log and return if inline_query is missing
+            logger.warning("No inline_query found in update for inline_query handler.")
+            return
 
-            query = getattr(update.inline_query, "query", "")
-            results = [
-                InlineQueryResultArticle(
-                    id=str(uuid4()),
-                    title="Summarize Conversation",
-                    input_message_content=InputTextMessageContent(f"/tldr"),
-                    description="Summarize the conversation in the group chat",
-                ),
-                InlineQueryResultArticle(
-                    id=str(uuid4()),
-                    title="Start",
-                    input_message_content=InputTextMessageContent(f"/start"),
-                    description="Start the bot",
-                ),
-                InlineQueryResultArticle(
-                    id=str(uuid4()),
-                    title="Help",
+        query = getattr(update.inline_query, "query", "")
+        results = [
+            InlineQueryResultArticle(
+                id=str(uuid4()),
+                title="Summarize Conversation",
+                input_message_content=InputTextMessageContent(f"/tldr"),
+                description="Summarize the conversation in the group chat",
+            ),
+            InlineQueryResultArticle(
+                id=str(uuid4()),
+                title="Start",
+                input_message_content=InputTextMessageContent(f"/start"),
+                description="Start the bot",
+            ),
+            InlineQueryResultArticle(
+                id=str(uuid4()),
+                title="Help",
                 input_message_content=InputTextMessageContent(f"/help"),
                 description="Display help information",
             ),
