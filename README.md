@@ -1,6 +1,6 @@
 # TLDRBot
 
-A powerful Telegram bot that enhances group productivity through AI-powered conversation management, bill splitting, and media handling. Built with Python and modern AI models, TLDRBot helps teams stay organized and efficient in their group chats.
+A powerful Telegram bot that enhances group productivity through AI-powered conversation management, bill splitting, and media handling. Built with Python and modern AI models, tldrbot helps teams stay organized and efficient in their group chats.
 
 ## 🌟 Key Features
 
@@ -10,32 +10,27 @@ A powerful Telegram bot that enhances group productivity through AI-powered conv
   - Configurable message range (default: 50, max: 400)
   - Supports multiple AI models for different quality/performance needs
 
-### 2. Context-Aware Q&A
-- Reply to any summary with questions
-- Bot provides answers based on the conversation context
-- Maintains conversation memory for accurate responses
-
-### 3. Intelligent Bill Splitting
+### 2. Intelligent Bill Splitting
 - **Receipt Processing**: Upload receipt photos with payment context
-- **Smart OCR**: Uses Mistral AI for accurate text extraction
+- **Smart OCR**: Uses AI for accurate text extraction
 - **Flexible Payment Matching**:\
   Individual items: "Alice: Burger, Bob: Salad"\
   Shared items: "Shared: Drinks"\
   Automatic tax and service charge calculations
 - **Interactive Flow**: Confirmation steps to ensure accuracy
 
-### 4. Media Handling
+### 3. Media Handling
 - **Video Downloads**: `/dl` command for short-form videos
-  - Supports TikTok, YouTube Shorts, Instagram Reels
+  - Supports TikTok videos
   - Direct download in chat
-  - Powered by yt-dlp for reliable downloads
 
-### 5. Multi-Model AI Support
+### 4. Multi-Model AI Support
 - Switch between different AI models:
   - OpenAI (GPT models)
   - Groq (Llama 3)
   - DeepSeek
 - Use `/switch_model` to change models based on needs
+- Set your own API key with `/set_api_key`
 
 ## 🛠️ Technical Architecture
 
@@ -53,30 +48,30 @@ A powerful Telegram bot that enhances group productivity through AI-powered conv
 
 3. **AI Service**
    - Strategy pattern for multiple AI models
-   - Handles summarization and Q&A
+   - Handles summarization
    - OCR processing for receipts
 
 4. **Memory Storage**
    - In-memory message storage
-   - Efficient chat history management
-   - No persistent database required
+   - Efficient chat history management (stores up to 400 messages)
+   - Persistent database for analytics
 
 5. **Bill Splitting System**
    - **Receipt Processing Pipeline**:
      - OCR using Mistral AI for text extraction
      - AI-powered receipt data structuring
      - Pydantic models for data validation
-   
+
    - **Context Analysis**:
      - LLM-based payment context parsing
      - Smart item-to-person matching
      - Shared item detection
-   
+
    - **Calculation Engine**:
      - Proportional tax and service charge distribution
      - Individual and shared item cost calculations
      - Validation against receipt totals
-   
+
    - **Conversation Flow**:
      - Multi-step confirmation process
      - Error handling and recovery
@@ -87,13 +82,15 @@ A powerful Telegram bot that enhances group productivity through AI-powered conv
 ### Prerequisites
 - Python 3.10 or higher
 - Telegram Bot Token
-- API keys for desired AI services
+- API keys for desired AI services (OpenAI, Groq, DeepSeek)
+- Redis instance
+- PostgreSQL or compatible database
 
 ### Installation
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/TeleBot.git
-   cd TeleBot
+   git clone https://github.com/advaitbd/tldrbot.git
+   cd tldrbot
    ```
 
 2. Create and activate virtual environment:
@@ -111,16 +108,28 @@ A powerful Telegram bot that enhances group productivity through AI-powered conv
    ```bash
    # Required
    BOT_TOKEN=your_telegram_bot_token
-   
+
    # Optional (based on AI models you want to use)
    OPENAI_API_KEY=your_openai_key
+   OPENAI_MODEL=gpt-4o-mini  # Optional, defaults to gpt-4o-mini
    GROQ_API_KEY=your_groq_key
+   GROQ_MODEL=llama3-8b-8192  # Optional, defaults to llama3-8b-8192
    DEEPSEEK_API_KEY=your_deepseek_key
-   MISTRAL_API_KEY=your_mistral_key
-   
+   DEEPSEEK_MODEL=deepseek-chat  # Optional, defaults to deepseek-chat
+
+   # Required
+   MISTRAL_API_KEY=your_mistral_key # For OCR in the bill splitting feature
+
    # Optional (for webhook deployment)
    WEBHOOK_URL=your_webhook_url
    PORT=your_port
+
+   # Required for Redis and database
+   REDIS_URL=redis://<host>:<port>/<db>
+   DATABASE_URL=postgresql://user:password@host:port/dbname
+
+   # Optional for content filtering
+   CENSOR=comma,separated,words
    ```
 
 5. Run the bot:
@@ -136,6 +145,8 @@ A powerful Telegram bot that enhances group productivity through AI-powered conv
 - `/splitbill` - Start bill splitting process
 - `/dl <url>` - Download short-form video
 - `/switch_model <model>` - Change AI model
+- `/set_api_key` - Set your own API key for a provider
+- `/clear_api_key` - Remove your API key for a provider
 - `/cancel` - Cancel current operation
 
 ### Bill Splitting Flow
@@ -146,23 +157,34 @@ A powerful Telegram bot that enhances group productivity through AI-powered conv
 
 ### Model Switching
 Available models:
-- `openai` - OpenAI's GPT models
-- `groq` - Groq's Llama 3
-- `deepseek` - DeepSeek models
+- `openai` - OpenAI's GPT models (default: gpt-4o-mini)
+- `groq` - Groq's Llama 3 (default: llama3-8b-8192)
+- `deepseek` - DeepSeek models (default: deepseek-chat)
 
 ## 🔧 Development
 
 ### Project Structure
 ```
-TeleBot/
+tldrbot/
 ├── bot/
 │   ├── config/         # Configuration settings
 │   ├── handlers/       # Command and message handlers
-│   ├── services/       # Core services (AI, Telegram)
+│   │   ├── conversations/ # Conversation handlers
+│   │   ├── command_handlers.py # Main command handlers
+│   │   └── message_handlers.py # Message handlers
+│   ├── services/       # Core services
+│   │   ├── ai/         # AI model strategies
+│   │   ├── bill_splitter.py # Bill splitting logic
+│   │   ├── redis_queue.py # Redis job queue
+│   │   └── telegram_service.py # Telegram API wrapper
 │   ├── utils/          # Utility functions
+│   │   ├── analytics_storage.py # Database storage
+│   │   ├── memory_storage.py # In-memory message storage
+│   │   └── text_processor.py # Text formatting
 │   └── main.py         # Bot entry point
+├── pyproject.toml      # Project metadata
 ├── requirements.txt    # Dependencies
-└── README.md          # Documentation
+└── README.md           # Documentation
 ```
 
 ### Extending the Bot
@@ -186,7 +208,7 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## 🚦 Background Job Queueing with Redis
 
-**LLM-powered commands** (like `/tldr`) are now handled via a Redis-backed job queue for maximum responsiveness and reliability.
+**LLM-powered commands** (like `/tldr`) are handled via a Redis-backed job queue for maximum responsiveness and reliability.
 
 - When a user calls `/tldr`, the bot **immediately replies** that the summary is being prepared.
 - The request is **queued in Redis**.
@@ -203,13 +225,11 @@ Bot (immediately): Summarizing... I'll send the summary here when it's ready! �
 Bot (a few seconds later):
 _Conversation summarized for the last 30 messages:_
 Summary: ...
-Sentiment: ...
-Events: ...
 ```
 
 ## 📊 Analytics & Event Logging
 
-- TLDRBot logs all user interactions and commands to a relational database for analytics and monitoring.
+- tldrbot logs all user interactions and commands to a relational database for analytics and monitoring.
 - Events are stored in a `user_events` table with user, chat, event type, and timestamp.
 - This enables usage tracking, feature analytics, and debugging.
 
@@ -232,6 +252,7 @@ Events: ...
 | event_type  | String       | Type of event/command      |
 | timestamp   | DateTime     | When the event occurred    |
 | extra       | Text         | Optional extra data (JSON) |
+| llm_name    | String       | Name of the LLM used       |
 
 ## 🏗️ System Flow
 
