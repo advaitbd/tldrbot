@@ -61,6 +61,8 @@ class Bot:
             application.add_handler(CommandHandler("tldr", self.command_handlers.summarize))
             application.add_handler(CommandHandler("dl", self.telegram_service.download_tiktok))
             application.add_handler(CommandHandler("switch_model", self.command_handlers.switch_model))
+            application.add_handler(CommandHandler("set_api_key", self.command_handlers.set_api_key))
+            application.add_handler(CommandHandler("clear_api_key", self.command_handlers.clear_api_key))
             # Bill splitting conversation (receipt + confirmation)
             split_conv = ConversationHandler(
                 entry_points=[CommandHandler("splitbill", self.command_handlers.split_bill_start)],
@@ -105,6 +107,8 @@ class Bot:
             BotCommand("splitbill", "Split bill from receipt"),
             BotCommand("dl", "Download TikTok videos"),
             BotCommand("switch_model", "Switch AI model (QA/Summary)"),
+            BotCommand("set_api_key", "Set your own API key for a provider"),
+            BotCommand("clear_api_key", "Remove your API key for a provider"),
             BotCommand("cancel", "Cancel current operation (like bill split)"),
         ]
         await application.bot.set_my_commands(commands)
@@ -142,7 +146,6 @@ class Bot:
     async def _llm_worker(self, application):
         """Background worker to process LLM jobs from Redis queue."""
         from telegram.constants import ParseMode
-        ai_service = self.command_handlers.ai_service
         while True:
             job = await self.redis_queue.dequeue(timeout=5)
             if not job:
@@ -155,7 +158,8 @@ class Bot:
                 user_name = job.get("user_id", "User")
                 original_messages = job.get("original_messages", [])
                 try:
-                    response = ai_service.get_response(prompt)
+                    # Always use the latest ai_service (strategy may change per user)
+                    response = self.command_handlers.ai_service.get_response(prompt)
                     formatted_summary = self.command_handlers._format_summary(str(response), user_name, num_messages)
                     await application.bot.send_message(
                         chat_id=chat_id,
