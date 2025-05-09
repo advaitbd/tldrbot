@@ -86,24 +86,28 @@ class CommandHandlers:
             logger.warning("No message found in update for help_command.")
 
     def _get_user_strategy(self, user_id: int, provider: str):
-            """Return a strategy for the provider, using user key if available."""
-            provider = provider.lower()
-            user_key = get_user_api_key(user_id, provider)
-            if provider == "openai":
-                key = user_key if user_key is not None else (OpenAIConfig.API_KEY if OpenAIConfig.API_KEY is not None else "")
-                model = OpenAIConfig.MODEL if OpenAIConfig.MODEL is not None else ""
-                return OpenAIStrategy(key, model)
-            elif provider == "groq":
-                key = user_key if user_key is not None else (GroqAIConfig.API_KEY if GroqAIConfig.API_KEY is not None else "")
-                model = GroqAIConfig.MODEL if GroqAIConfig.MODEL is not None else ""
-                return GroqAIStrategy(key, model)
-            elif provider == "deepseek":
-                key = user_key if user_key is not None else (DeepSeekAIConfig.API_KEY if DeepSeekAIConfig.API_KEY is not None else "")
-                model = DeepSeekAIConfig.MODEL if DeepSeekAIConfig.MODEL is not None else ""
-                return DeepSeekStrategy(key, model)
-            else:
-                raise ValueError(f"Unknown provider: {provider}")
+        """Return a strategy for the provider, using user key if available."""
+        provider = provider.lower()
+        return self._resolve_strategy(
+            user_id,
+            provider,
+            {
+                "openai": (OpenAIConfig, OpenAIStrategy),
+                "groq": (GroqAIConfig, GroqAIStrategy),
+                "deepseek": (DeepSeekAIConfig, DeepSeekStrategy),
+            },
+        )
 
+    def _resolve_strategy(self, user_id: int, provider: str, config_map: dict):
+        """Helper function to resolve API key and model for a given provider."""
+        if provider not in config_map:
+            raise ValueError(f"Unknown provider: {provider}")
+
+        config_class, strategy_class = config_map[provider]
+        user_key = get_user_api_key(user_id, provider)
+        key = user_key if user_key is not None else (config_class.API_KEY if config_class.API_KEY is not None else "")
+        model = config_class.MODEL if config_class.MODEL is not None else ""
+        return strategy_class(key, model)
     def _get_user_selected_model(self, user_id: int):
         """Get the user's selected model/provider, or default to 'deepseek'."""
         return self.user_selected_model.get(user_id, "deepseek")
