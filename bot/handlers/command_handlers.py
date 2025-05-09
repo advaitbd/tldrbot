@@ -10,8 +10,12 @@ from utils.memory_storage import MemoryStorage
 from services.ai.ai_service import AIService
 from utils.text_processor import TextProcessor
 from utils.analytics_storage import log_user_event  # <-- NEW
+from utils.user.user_api_keys import set_user_api_key, get_user_api_key, clear_user_api_key, get_all_user_keys
 import logging
-from config.settings import OpenAIConfig, GroqAIConfig
+from config.settings import OpenAIConfig, GroqAIConfig, DeepSeekAIConfig
+from services.ai.openai_strategy import OpenAIStrategy
+from services.ai.groq_strategy import GroqAIStrategy
+from services.ai.deepseek_strategy import DeepSeekStrategy
 
 # Import the new bill splitting service functions
 from services.bill_splitter import (
@@ -34,6 +38,8 @@ class CommandHandlers:
         self.memory_storage = memory_storage
         self.ai_service = AIService(StrategyRegistry.get_strategy("deepseek"))
         self.redis_queue = redis_queue or RedisQueue()
+        # Optionally: track per-user model selection in memory
+        self.user_selected_model = {}  # {user_id: provider_name}
 
     async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         # --- Analytics logging ---
@@ -57,7 +63,10 @@ class CommandHandlers:
             "• `/tldr [number]` — Summarize the last [number] messages (default: 50)\n"
             "• `/dl [URL]` — Download TikToks, Reels, Shorts, etc. (WIP: might not work sometimes)\n"
             "• `/switch_model [model]` — Change the AI model\n"
+            "• `/set_api_key <provider> <key>` — Set your own API key for a provider (BYOK)\n"
+            "• `/clear_api_key <provider>` — Remove your API key for a provider\n"
             "\n*Available Models:*\n"
+            "• `openai` — OpenAI GPT models\n"
             "• `groq` — Uses Llama 3 (8bn) hosted by groq\n"
             "• `deepseek` — DeepSeek V3\n"
             "\n*Features:*\n"
@@ -71,6 +80,29 @@ class CommandHandlers:
             await update.message.reply_text(help_text, parse_mode="Markdown")
         else:
             logger.warning("No message found in update for help_command.")
+
+    def _get_user_strategy(self, user_id: int, provider: str):
+        """Return a strategy for the provider, using user key if available."""
+        provider = provider.lower()
+        user_key = get_user_api_key(user_id, provider)
+        if provider == "openai":
+            key = user_key or OpenAIConfig.API_KEY
+            model = OpenAIConfig.MODEL
+            return OpenAIStrategy(key, model)
+        elif provider == "groq":
+            key = user_key or GroqAIConfig.API_KEY
+            model = GroqAIConfig.MODEL
+            return GroqAIStrategy(key, model)
+        elif provider == "deepseek":
+            key = user_key or DeepSeekAIConfig.API_KEY
+            model = DeepSeekAIConfig.MODEL
+            return DeepSeekStrategy(key, model)
+        else:
+            raise ValueError(f"Unknown provider: {provider}")
+
+    def _get_user_selected_model(self, user_id: int):
+        """Get the user's selected model/provider, or default to 'deepseek'."""
+        return self.user_selected_model.get(user_id, "deepseek")
 
     async def summarize(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         # --- Analytics logging ---
@@ -111,6 +143,16 @@ class CommandHandlers:
             await update.message.reply_text("Summarizing... I'll send the summary here when it's ready! 📝")
         else:
             await context.bot.send_message(chat_id=chat_id, text="Summarizing... I'll send the summary here when it's ready! 📝")
+
+        # Use user's selected model/provider and key if available
+        provider = self._get_user_selected_model(user.id if user else 0)
+        try:
+            strategy = self._get_user_strategy(user.id if user else 0, provider)
+            self.ai_service.set_strategy(strategy)
+        except Exception as e:
+            logger.error(f"Error setting user strategy: {str(e)}")
+            # fallback to default
+            self.ai_service.set_strategy(StrategyRegistry.get_strategy("deepseek"))
 
         # Enqueue the LLM job in Redis
         job_data = {
@@ -158,21 +200,61 @@ class CommandHandlers:
             await safe_reply("Please provide a model name.")
             return
 
-        new_model = context.args[0]
+        new_model = context.args[0].lower()
 
         available_models = StrategyRegistry.available_strategies()
         if new_model not in available_models:
             await safe_reply(f"Invalid model name. Available models: {', '.join(available_models)}")
             return
 
+        # Save user model selection
+        if user:
+            self.user_selected_model[user.id] = new_model
+
         try:
-            strategy = StrategyRegistry.get_strategy(new_model)
+            # Use user's key if available
+            strategy = self._get_user_strategy(user.id if user else 0, new_model)
             self.ai_service.set_strategy(strategy)
             await safe_reply(f"Model switched to {new_model}")
 
         except Exception as e:
             logger.error(f"Error switching model: {str(e)}")
             await safe_reply(f"Failed to switch model: {str(e)}")
+
+    async def set_api_key(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Allow user to set their own API key for a provider."""
+        user = update.effective_user
+        if not user:
+            return
+        args = context.args
+        if len(args) != 2:
+            await update.message.reply_text("Usage: /set_api_key <provider> <key>")
+            return
+        provider, key = args
+        provider = provider.lower()
+        available_models = StrategyRegistry.available_strategies()
+        if provider not in available_models:
+            await update.message.reply_text(f"Invalid provider. Available: {', '.join(available_models)}")
+            return
+        set_user_api_key(user.id, provider, key)
+        await update.message.reply_text(f"API key for {provider} set successfully! Future requests will use your key.")
+
+    async def clear_api_key(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Allow user to clear their API key for a provider."""
+        user = update.effective_user
+        if not user:
+            return
+        args = context.args
+        if len(args) != 1:
+            await update.message.reply_text("Usage: /clear_api_key <provider>")
+            return
+        provider = args[0].lower()
+        available_models = StrategyRegistry.available_strategies()
+        if provider not in available_models:
+            await update.message.reply_text(f"Invalid provider. Available: {', '.join(available_models)}")
+            return
+        clear_user_api_key(user.id, provider)
+        await update.message.reply_text(f"API key for {provider} cleared. The bot will use the default key.")
 
     async def inline_query(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
             """Handle inline queries."""
