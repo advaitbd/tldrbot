@@ -66,9 +66,12 @@ class CommandHandlers:
             "*Commands:*\n"
             "• `/tldr [number]` — Summarize the last [number] messages (default: 50)\n"
             "• `/dl [URL]` — Download TikToks, Reels, Shorts, etc. (WIP: might not work sometimes)\n"
-            "• `/switch_model [model]` — Change the AI model\n"
+            "• `/switch_model <provider>` — Change the AI model\n"
             "• `/set_api_key <provider> <key>` — Set your own API key for a provider (BYOK)\n"
+            "    Valid providers: `openai`, `groq`, `deepseek`\n"
             "• `/clear_api_key <provider>` — Remove your API key for a provider\n"
+            "    Valid providers: `openai`, `groq`, `deepseek`\n"
+            "• `/list_providers` — List all valid provider names\n"
             "\n*Available Models:*\n"
             "• `openai` — OpenAI GPT models\n"
             "• `groq` — Uses Llama 3 (8bn) hosted by groq\n"
@@ -244,7 +247,11 @@ class CommandHandlers:
         provider = provider.lower()
         available_models = StrategyRegistry.available_strategies()
         if provider not in available_models:
-            await update.message.reply_text(f"Invalid provider. Available: {', '.join(available_models)}")
+            await update.message.reply_text(
+                f"❗ Invalid provider '{provider}'.\n"
+                f"Please use one of: {', '.join(f'`{m}`' for m in available_models)}\n"
+                "You can also use /list_providers to see all valid options."
+            )
             return
         set_user_api_key(user.id, provider, key)
         await update.message.reply_text(f"API key for {provider} set successfully! Future requests will use your key.")
@@ -261,35 +268,52 @@ class CommandHandlers:
         provider = args[0].lower()
         available_models = StrategyRegistry.available_strategies()
         if provider not in available_models:
-            await update.message.reply_text(f"Invalid provider. Available: {', '.join(available_models)}")
+            await update.message.reply_text(
+                f"❗ Invalid provider '{provider}'.\n"
+                f"Please use one of: {', '.join(f'`{m}`' for m in available_models)}\n"
+                "You can also use /list_providers to see all valid options."
+            )
             return
         clear_user_api_key(user.id, provider)
         await update.message.reply_text(f"API key for {provider} cleared. The bot will use the default key.")
 
-    async def inline_query(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle inline queries."""
-        if not hasattr(update, "inline_query") or update.inline_query is None:
-            # Defensive: log and return if inline_query is missing
-            logger.warning("No inline_query found in update for inline_query handler.")
-            return
+    async def list_providers(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """List all valid provider names for BYOK and model switching."""
+        available_models = StrategyRegistry.available_strategies()
+        msg = (
+            "🗝️ *Valid Providers for BYOK and Model Switching:*\n\n"
+            + "\n".join(f"• `{m}`" for m in available_models)
+            + "\n\nUse these names for `/set_api_key`, `/clear_api_key`, and `/switch_model`."
+        )
+        if update.message:
+            await update.message.reply_text(msg, parse_mode="Markdown")
+        else:
+            logger.warning("No message found in update for list_providers.")
 
-        query = getattr(update.inline_query, "query", "")
-        results = [
-            InlineQueryResultArticle(
-                id=str(uuid4()),
-                title="Summarize Conversation",
-                input_message_content=InputTextMessageContent(f"/tldr"),
-                description="Summarize the conversation in the group chat",
-            ),
-            InlineQueryResultArticle(
-                id=str(uuid4()),
-                title="Start",
-                input_message_content=InputTextMessageContent(f"/start"),
-                description="Start the bot",
-            ),
-            InlineQueryResultArticle(
-                id=str(uuid4()),
-                title="Help",
+    async def inline_query(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+            """Handle inline queries."""
+            if not hasattr(update, "inline_query") or update.inline_query is None:
+                # Defensive: log and return if inline_query is missing
+                logger.warning("No inline_query found in update for inline_query handler.")
+                return
+
+            query = getattr(update.inline_query, "query", "")
+            results = [
+                InlineQueryResultArticle(
+                    id=str(uuid4()),
+                    title="Summarize Conversation",
+                    input_message_content=InputTextMessageContent(f"/tldr"),
+                    description="Summarize the conversation in the group chat",
+                ),
+                InlineQueryResultArticle(
+                    id=str(uuid4()),
+                    title="Start",
+                    input_message_content=InputTextMessageContent(f"/start"),
+                    description="Start the bot",
+                ),
+                InlineQueryResultArticle(
+                    id=str(uuid4()),
+                    title="Help",
                 input_message_content=InputTextMessageContent(f"/help"),
                 description="Display help information",
             ),

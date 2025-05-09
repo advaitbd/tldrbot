@@ -63,6 +63,7 @@ class Bot:
             application.add_handler(CommandHandler("switch_model", self.command_handlers.switch_model))
             application.add_handler(CommandHandler("set_api_key", self.command_handlers.set_api_key))
             application.add_handler(CommandHandler("clear_api_key", self.command_handlers.clear_api_key))
+            application.add_handler(CommandHandler("list_providers", self.command_handlers.list_providers))
             # Bill splitting conversation (receipt + confirmation)
             split_conv = ConversationHandler(
                 entry_points=[CommandHandler("splitbill", self.command_handlers.split_bill_start)],
@@ -109,6 +110,7 @@ class Bot:
             BotCommand("switch_model", "Switch AI model (QA/Summary)"),
             BotCommand("set_api_key", "Set your own API key for a provider"),
             BotCommand("clear_api_key", "Remove your API key for a provider"),
+            BotCommand("list_providers", "List all valid provider names"),
             BotCommand("cancel", "Cancel current operation (like bill split)"),
         ]
         await application.bot.set_my_commands(commands)
