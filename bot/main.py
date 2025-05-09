@@ -146,7 +146,6 @@ class Bot:
     async def _llm_worker(self, application):
         """Background worker to process LLM jobs from Redis queue."""
         from telegram.constants import ParseMode
-        ai_service = self.command_handlers.ai_service
         while True:
             job = await self.redis_queue.dequeue(timeout=5)
             if not job:
@@ -159,7 +158,8 @@ class Bot:
                 user_name = job.get("user_id", "User")
                 original_messages = job.get("original_messages", [])
                 try:
-                    response = ai_service.get_response(prompt)
+                    # Always use the latest ai_service (strategy may change per user)
+                    response = self.command_handlers.ai_service.get_response(prompt)
                     formatted_summary = self.command_handlers._format_summary(str(response), user_name, num_messages)
                     await application.bot.send_message(
                         chat_id=chat_id,
