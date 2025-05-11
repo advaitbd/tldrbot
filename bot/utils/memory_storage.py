@@ -13,6 +13,8 @@ class MemoryStorage:
         max_messages indicates how many messages we keep per chat.
         """
         self.storage = defaultdict(lambda: deque(maxlen=max_messages))
+        # Store summary context: {chat_id: {"summary_message_id": int, "original_messages": List[str]}}
+        self.summary_context = {}
 
     def store_message(self, chat_id: int, sender_name: str, message_text: str):
         """
@@ -28,3 +30,19 @@ class MemoryStorage:
         messages = self.storage[chat_id]
         # Return the LAST num_messages as a list
         return list(messages)[-num_messages:]
+
+    def set_summary_context(self, chat_id: int, summary_message_id: int, original_messages: List[str]):
+        """
+        Store the summary message ID and original messages for a chat.
+        """
+        self.summary_context[chat_id] = {
+            "summary_message_id": summary_message_id,
+            "original_messages": original_messages,
+        }
+
+    def get_summary_context(self, chat_id: int):
+        """
+        Retrieve the summary context (summary_message_id and original_messages) for a chat.
+        Returns None if not set.
+        """
+        return self.summary_context.get(chat_id)
