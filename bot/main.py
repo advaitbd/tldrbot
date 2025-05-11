@@ -82,14 +82,10 @@ class Bot:
                 per_chat=True,
             )
             application.add_handler(split_conv)
-            # Message handlers
-            # Only add if reply_handler exists (diagnostic fix)
-            if hasattr(self.message_handlers, "handle_reply") and callable(getattr(self.message_handlers, "handle_reply", None)):
-                application.add_handler(MessageHandler(
-                    filters.REPLY & ~filters.COMMAND,  # Ensure it's not a command reply
-                    self.message_handlers.handle_reply
-                ))
-
+            application.add_handler(MessageHandler(
+                filters.REPLY & ~filters.COMMAND,  # Ensure it's not a command reply
+                self.message_handlers.handle_reply
+            ))
             # Inline query handler
             application.add_handler(InlineQueryHandler(self.command_handlers.inline_query))
 
