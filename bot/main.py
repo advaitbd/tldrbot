@@ -29,9 +29,9 @@ logger = logging.getLogger(__name__)
 
 class Bot:
     def __init__(self):
-        self.message_handlers = MessageHandlers()
-        self.telegram_service = TelegramService()
         self.memory_storage = MemoryStorage(max_messages=400)
+        self.message_handlers = MessageHandlers(self.memory_storage)
+        self.telegram_service = TelegramService()
         self.redis_queue = RedisQueue()
         self.command_handlers = CommandHandlers(self.memory_storage, redis_queue=self.redis_queue)
         self._worker_task = None
@@ -159,11 +159,19 @@ class Bot:
                     # Always use the latest ai_service (strategy may change per user)
                     response = self.command_handlers.ai_service.get_response(prompt)
                     formatted_summary = self.command_handlers._format_summary(str(response), user_name, num_messages)
-                    await application.bot.send_message(
+                    sent_msg = await application.bot.send_message(
                         chat_id=chat_id,
                         text=formatted_summary,
                         parse_mode=ParseMode.MARKDOWN_V2,
                         disable_web_page_preview=True,
+                    )
+                    # Store summary context for reply-to-summary feature
+                    self.memory_storage.set_summary_context(
+                        chat_id, sent_msg.message_id, original_messages
+                    )
+                    # Store summary context for reply-to-summary feature
+                    self.memory_storage.set_summary_context(
+                        chat_id, sent_msg.message_id, original_messages
                     )
                 except Exception as e:
                     logger.error(f"LLM worker error: {e}")
