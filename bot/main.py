@@ -83,7 +83,7 @@ class Bot:
             )
             application.add_handler(split_conv)
             application.add_handler(MessageHandler(
-                filters.REPLY & ~filters.COMMAND,  # Ensure it's not a command reply
+                filters.REPLY,
                 self.message_handlers.handle_reply
             ))
             # Inline query handler
