@@ -30,9 +30,9 @@ logger = logging.getLogger(__name__)
 class Bot:
     def __init__(self):
         self.memory_storage = MemoryStorage(max_messages=400)
-        self.message_handlers = MessageHandlers(self.memory_storage)
-        self.telegram_service = TelegramService()
         self.redis_queue = RedisQueue()
+        self.message_handlers = MessageHandlers(self.memory_storage, redis_queue=self.redis_queue)
+        self.telegram_service = TelegramService()
         self.command_handlers = CommandHandlers(self.memory_storage, redis_queue=self.redis_queue)
         self._worker_task = None
 
@@ -178,6 +178,32 @@ class Bot:
                     await application.bot.send_message(
                         chat_id=chat_id,
                         text="Sorry, I couldn't generate a summary due to an error.",
+                        disable_web_page_preview=True,
+                    )
+            elif job.get("type") == "reply_to_summary":
+                chat_id = job["chat_id"]
+                user_id = job.get("user_id", "User")
+                question = job.get("question", "")
+                original_messages = job.get("original_messages", [])
+                summary_context = job.get("summary_context", {})
+                try:
+                    # Build the QA prompt
+                    prompt = MessageHandlers._create_qa_prompt(original_messages, question)
+                    response = self.command_handlers.ai_service.get_response(prompt)
+                    # Format the answer for Telegram (escape markdown)
+                    from utils.text_processor import TextProcessor
+                    formatted_answer = TextProcessor.escape_markdown(response)
+                    await application.bot.send_message(
+                        chat_id=chat_id,
+                        text=formatted_answer,
+                        parse_mode=ParseMode.MARKDOWN_V2,
+                        disable_web_page_preview=True,
+                    )
+                except Exception as e:
+                    logger.error(f"LLM worker error (reply_to_summary): {e}")
+                    await application.bot.send_message(
+                        chat_id=chat_id,
+                        text="Sorry, I couldn't answer your question due to an error.",
                         disable_web_page_preview=True,
                     )
 
