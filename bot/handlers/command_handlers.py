@@ -1,5 +1,6 @@
 # Add necessary imports
-from telegram import Update, InlineQueryResultArticle, InputTextMessageContent, PhotoSize
+import time
+from telegram import Update, InlineQueryResultArticle, InputTextMessageContent, PhotoSize, InlineKeyboardButton, InlineKeyboardMarkup
 from uuid import uuid4
 from telegram.ext import (
     ContextTypes, ConversationHandler, CommandHandler as TelegramCommandHandler, # Rename to avoid clash
@@ -12,10 +13,15 @@ from utils.text_processor import TextProcessor
 from utils.analytics_storage import log_user_event  # <-- NEW
 from utils.user.user_api_keys import set_user_api_key, get_user_api_key, clear_user_api_key, get_all_user_keys
 import logging
-from config.settings import OpenAIConfig, GroqAIConfig, DeepSeekAIConfig
+from config.settings import OpenAIConfig, GroqAIConfig, DeepSeekConfig, StripeConfig
 from services.ai.openai_strategy import OpenAIStrategy
 from services.ai.groq_strategy import GroqAIStrategy
 from services.ai.deepseek_strategy import DeepSeekStrategy
+
+# Import freemium services
+from services.usage_service import UsageService
+from services.stripe_service import StripeService
+from utils.user_management import is_premium
 
 # Import the new bill splitting service functions
 from services.bill_splitter import (
@@ -36,13 +42,22 @@ RECEIPT_IMAGE, CONFIRMATION = range(2)
 class CommandHandlers:
     def __init__(self, memory_storage: MemoryStorage, redis_queue: RedisQueue | None = None):
         self.memory_storage = memory_storage
-        self.ai_service = AIService(StrategyRegistry.get_strategy("deepseek"))  # Explicitly declare ai_service
-        if redis_queue is not None:
-            self.redis_queue = redis_queue
-        else:
-            self.redis_queue = RedisQueue()
-        # Optionally: track per-user model selection in memory
-        self.user_selected_model = {}  # {user_id: provider_name}
+        self.redis_queue = redis_queue
+        self.ai_service = AIService(StrategyRegistry.get_strategy("deepseek"))
+        self.text_processor = TextProcessor()
+        self.user_selected_model = {}
+        
+        # Initialize freemium services
+        self.usage_service = UsageService()
+        self.stripe_service = StripeService()
+    #     self.user_subscription = {}  # {user_id: subscription_status}
+
+    # async def subscribe(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    #     user = update.effective_user
+    #     if user is None or update.message is None:
+    #         return
+    #     self.user_subscription[user.id] = True
+    #     await update.message.reply_text("You are now subscribed to the bot. You will receive a notification when a new message is posted.")
 
     async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         # --- Analytics logging ---
@@ -60,6 +75,16 @@ class CommandHandlers:
             )
         # --- End analytics logging ---
 
+        # Get usage statistics for the user
+        usage_info = ""
+        if user:
+            try:
+                usage_string = await self.usage_service.format_usage_string(user.id)
+                usage_info = f"\n\n*Account & Usage:*\n{usage_string}\nUpgrade anytime with /upgrade"
+            except Exception as e:
+                logger.error(f"Error getting usage info for help command: {e}")
+                usage_info = "\n\n*Account & Usage:* Unable to load usage information"
+
         help_text = (
             "🤖 *Welcome to TLDR Bot!* 🤖\n\n"
             "I help you summarize conversations and provide insights. Here's what I can do:\n\n"
@@ -70,8 +95,9 @@ class CommandHandlers:
             "• `/set_api_key <provider> <key>` — Set your own API key for a provider (BYOK)\n"
             "    Valid providers: `openai`, `groq`, `deepseek`\n"
             "• `/clear_api_key <provider>` — Remove your API key for a provider\n"
-            "    Valid providers: `openai`, `groq`, `deepseek`\n"
             "• `/list_providers` — List all valid provider names\n"
+            "• `/upgrade` — Upgrade to Premium for unlimited access\n"
+            "• `/usage` — Check your current usage statistics\n"
             "\n*Available Models:*\n"
             "• `openai` — OpenAI GPT models\n"
             "• `groq` — Uses Llama 3 (8bn) hosted by groq\n"
@@ -80,6 +106,7 @@ class CommandHandlers:
             "• Reply to my summaries with questions for more insights\n"
             "• View sentiment analysis in summaries\n"
             "• Get key events extracted from conversations\n"
+            f"{usage_info}\n"
             "\n*Current model:* " + str(self.ai_service.get_current_model())
         )
 
@@ -97,7 +124,7 @@ class CommandHandlers:
             {
                 "openai": (OpenAIConfig, OpenAIStrategy),
                 "groq": (GroqAIConfig, GroqAIStrategy),
-                "deepseek": (DeepSeekAIConfig, DeepSeekStrategy),
+                "deepseek": (DeepSeekConfig, DeepSeekStrategy),
             },
         )
 
@@ -138,6 +165,38 @@ class CommandHandlers:
             return
 
         chat_id = update.effective_chat.id
+        
+        # FREEMIUM: Check quota before processing
+        if user:
+            try:
+                # Track performance for quota checks
+                quota_start_time = time.time()
+                
+                # Check if user is within quota
+                within_quota = await self.usage_service.within_quota(user.id, chat_id)
+                
+                # Log performance metrics
+                quota_end_time = time.time()
+                quota_duration = (quota_end_time - quota_start_time) * 1000  # Convert to ms
+                
+                if quota_duration > 50:  # Log if quota check took longer than 50ms
+                    logger.warning(f"Quota check took {quota_duration:.2f}ms for user {user.id}")
+                else:
+                    logger.debug(f"Quota check completed in {quota_duration:.2f}ms for user {user.id}")
+                
+                if not within_quota:
+                    # Block the command and send DM
+                    await self._block_and_dm(user.id, update)
+                    return
+                    
+            except Exception as e:
+                logger.error(f"Error checking quota for user {user.id}: {e}")
+                # Fail-safe: allow premium users, block others
+                if not is_premium(user.id):
+                    if update.message:
+                        await update.message.reply_text("Service temporarily unavailable. Please try again later.")
+                    return
+
         num_messages = self._parse_message_count(getattr(context, "args", None), default=50, max_limit=400)
 
         if not num_messages:
@@ -155,6 +214,14 @@ class CommandHandlers:
             await update.message.reply_text("Summarizing... I'll send the summary here when it's ready! 📝")
         else:
             await context.bot.send_message(chat_id=chat_id, text="Summarizing... I'll send the summary here when it's ready! 📝")
+
+        # FREEMIUM: Increment usage counters for successful requests
+        if user:
+            try:
+                counters = await self.usage_service.increment_counters(user.id, chat_id)
+                logger.info(f"Updated usage counters for user {user.id}: {counters}")
+            except Exception as e:
+                logger.error(f"Error incrementing counters for user {user.id}: {e}")
 
         # Use user's selected model/provider and key if available
         provider = self._get_user_selected_model(user.id if user is not None else 0)
@@ -278,17 +345,193 @@ class CommandHandlers:
         await update.message.reply_text(f"API key for {provider} cleared. The bot will use the default key.")
 
     async def list_providers(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """List all valid provider names for BYOK and model switching."""
-        available_models = StrategyRegistry.available_strategies()
-        msg = (
-            "🗝️ *Valid Providers for BYOK and Model Switching:*\n\n"
-            + "\n".join(f"• `{m}`" for m in available_models)
-            + "\n\nUse these names for `/set_api_key`, `/clear_api_key`, and `/switch_model`."
-        )
+        """List all valid provider names."""
+        available_providers = StrategyRegistry.available_strategies()
+        providers_text = "Valid provider names:\n" + "\n".join([f"• `{provider}`" for provider in available_providers])
+        
         if update.message:
-            await update.message.reply_text(msg, parse_mode="Markdown")
+            await update.message.reply_text(providers_text, parse_mode="Markdown")
         else:
             logger.warning("No message found in update for list_providers.")
+
+    async def upgrade_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /upgrade command to show payment link for premium subscription."""
+        try:
+            user_id = update.effective_user.id
+            
+            # Import here to avoid circular imports  
+            from services.stripe_service import StripeService
+            stripe_service = StripeService()
+            
+            base_payment_link = stripe_service.get_payment_link()
+            if not base_payment_link:
+                await update.message.reply_text(
+                    "Payment system is not configured. Please contact support.",
+                    disable_web_page_preview=True
+                )
+                return
+            
+            # Add client_reference_id URL parameter with telegram_id
+            payment_link_with_id = f"{base_payment_link}?client_reference_id={user_id}"
+            
+            # message = (
+            #     "🚀 **Upgrade to Premium!**\n\n"
+            #     "✨ **Unlimited** AI conversations\n"
+            #     "⚡ **Priority** processing\n" 
+            #     "🎯 **Advanced** models access\n"
+            #     "📊 **Detailed** usage analytics\n\n"
+            #     f"Click here to upgrade: {payment_link_with_id}\n\n"
+            #     "_Payment powered by Stripe 🔒_"
+            # )
+            message = (
+                "🚀 **Upgrade to Premium!**\n\n"
+                "*Current limitations (Free Plan)*\n"
+                "• 5 summaries per day\n"
+                "• 100 summaries per month\n"
+                "• 3 group chats maximum\n\n"
+                "*Premium Features*\n"
+                "• ∞ Unlimited daily summaries\n"
+                "• ∞ Unlimited monthly summaries\n"
+                "• ∞ Unlimited group chats\n"
+                "• Priority support\n\n"
+                "*Price: $5/month\n\n"
+                "Click the button below to upgrade:\n\n"
+            )
+
+            
+            await update.message.reply_text(
+                message,
+                # parse_mode="Markdown", fix this later
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("💳 Subscribe $5/mo", url=payment_link_with_id)]
+                ]),
+                disable_web_page_preview=True
+            )
+            
+            # Log the upgrade attempt for analytics
+            from utils.analytics_storage import log_user_event
+            log_user_event(
+                user_id=user_id,
+                chat_id=update.effective_chat.id,
+                event_type="upgrade_link_generated",
+                extra=f"Payment link generated with client_reference_id: {user_id}"
+            )
+            
+        except Exception as e:
+            logger.error(f"Error in upgrade command: {e}")
+            await update.message.reply_text(
+                "Sorry, there was an error generating the payment link. Please try again later.",
+                disable_web_page_preview=True
+            )
+
+    async def usage_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /usage command to show current usage statistics."""
+        user = update.effective_user
+        chat = update.effective_chat
+        
+        if user is not None and chat is not None:
+            log_user_event(
+                user_id=user.id,
+                chat_id=chat.id,
+                event_type="usage_command",
+                username=getattr(user, "username", None),
+                first_name=getattr(user, "first_name", None),
+                last_name=getattr(user, "last_name", None),
+            )
+        
+        if not user:
+            return
+            
+        try:
+            usage_string = await self.usage_service.format_usage_string(user.id)
+            usage_message = f"📊 *Your Usage Statistics*\n\n{usage_string}"
+            
+            if not is_premium(user.id):
+                usage_message += "\n\nUpgrade to Premium for unlimited access: /upgrade"
+            
+            if update.message:
+                await update.message.reply_text(usage_message, parse_mode="Markdown")
+                
+        except Exception as e:
+            logger.error(f"Error getting usage stats for user {user.id}: {e}")
+            error_message = "Sorry, I couldn't retrieve your usage statistics at the moment. Please try again later."
+            if update.message:
+                await update.message.reply_text(error_message)
+
+    async def _block_and_dm(self, telegram_id: int, update: Update):
+        """Block over-quota command and send DM to user with upgrade CTA."""
+        try:
+            # Delete the command message in group if possible
+            if update.message and update.effective_chat and update.effective_chat.type in ['group', 'supergroup']:
+                try:
+                    await update.message.delete()
+                    logger.info(f"Deleted over-quota command from group {update.effective_chat.id}")
+                except Exception as e:
+                    logger.warning(f"Could not delete over-quota message: {e}")
+            
+            # Check DM throttling
+            can_dm = await self.usage_service.quota_manager.can_send_dm(telegram_id)
+            
+            if can_dm:
+                # Send DM to user
+                dm_message = (
+                    "🔒 *Free limit reached (5/day)*\n\n"
+                    "Upgrade for unlimited summaries and features!"
+                )
+                
+                # Add user to pending purchases for auto-linking
+                self.stripe_service.add_pending_purchase(telegram_id)
+                
+                payment_link = self.stripe_service.get_payment_link()
+                if payment_link:
+                    keyboard = InlineKeyboardMarkup([
+                        [InlineKeyboardButton("💳 Subscribe $5/mo", url=payment_link)]
+                    ])
+                    
+                    try:
+                        await update.get_bot().send_message(
+                            chat_id=telegram_id,
+                            text=dm_message,
+                            parse_mode="Markdown",
+                            reply_markup=keyboard
+                        )
+                        
+                        # Mark DM as sent to activate throttling
+                        await self.usage_service.quota_manager.mark_dm_sent(telegram_id)
+                        
+                        # Log the limit hit and DM sent
+                        log_user_event(
+                            user_id=telegram_id,
+                            chat_id=update.effective_chat.id if update.effective_chat else 0,
+                            event_type="limit_hit_dm_sent",
+                            extra="User hit quota limit, DM sent with upgrade CTA"
+                        )
+                        
+                        logger.info(f"Sent quota limit DM to user {telegram_id}")
+                        
+                    except Exception as e:
+                        logger.error(f"Failed to send DM to user {telegram_id}: {e}")
+                        # Fallback: reply in group (but only once per 15 min)
+                        await self._fallback_group_reply(update)
+                else:
+                    logger.error("No payment link available for quota limit DM")
+            else:
+                logger.info(f"DM throttled for user {telegram_id}, not sending quota limit message")
+                
+        except Exception as e:
+            logger.error(f"Error in block_and_dm for user {telegram_id}: {e}")
+
+    async def _fallback_group_reply(self, update: Update):
+        """Fallback reply in group when DM fails."""
+        try:
+            if update.message:
+                fallback_message = (
+                    "🔒 You've reached your daily summary limit. "
+                    "Send me a private message with /upgrade for unlimited access."
+                )
+                await update.message.reply_text(fallback_message)
+        except Exception as e:
+            logger.error(f"Error in fallback group reply: {e}")
 
     async def inline_query(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle inline queries."""
@@ -410,6 +653,45 @@ class CommandHandlers:
                 )
             return RECEIPT_IMAGE
 
+        # FREEMIUM: Check quota before processing (bill splitting uses AI services)
+        user = update.effective_user
+        chat_id = update.effective_chat.id if update.effective_chat else 0
+        
+        if user:
+            try:
+                # Track performance for quota checks
+                quota_start_time = time.time()
+                
+                # Check if user is within quota
+                within_quota = await self.usage_service.within_quota(user.id, chat_id)
+                
+                # Log performance metrics
+                quota_end_time = time.time()
+                quota_duration = (quota_end_time - quota_start_time) * 1000  # Convert to ms
+                
+                if quota_duration > 50:  # Log if quota check took longer than 50ms
+                    logger.warning(f"Quota check took {quota_duration:.2f}ms for user {user.id}")
+                else:
+                    logger.debug(f"Quota check completed in {quota_duration:.2f}ms for user {user.id}")
+                
+                if not within_quota:
+                    # Block the command and send DM
+                    await self._block_and_dm(user.id, update)
+                    return ConversationHandler.END
+                    
+            except Exception as e:
+                logger.error(f"Error checking quota for bill split user {user.id}: {e}")
+                # Fail-safe: allow premium users, block others
+                if not is_premium(user.id):
+                    if message and hasattr(message, "reply_text"):
+                        await message.reply_text("Service temporarily unavailable. Please try again later.")
+                    elif update.effective_chat:
+                        await context.bot.send_message(
+                            chat_id=update.effective_chat.id,
+                            text="Service temporarily unavailable. Please try again later."
+                        )
+                    return ConversationHandler.END
+
         photo_file = await message.photo[-1].get_file()
         image_stream = BytesIO()
         await photo_file.download_to_memory(image_stream)
@@ -425,6 +707,14 @@ class CommandHandlers:
                 chat_id=update.effective_chat.id,
                 text="Processing receipt and context..."
             )
+
+        # FREEMIUM: Increment usage counters for successful requests
+        if user:
+            try:
+                counters = await self.usage_service.increment_counters(user.id, chat_id)
+                logger.info(f"Updated usage counters for bill split user {user.id}: {counters}")
+            except Exception as e:
+                logger.error(f"Error incrementing counters for bill split user {user.id}: {e}")
 
         # 2. Extract receipt data
         receipt_data = await extract_receipt_data_from_image(image_bytes)
