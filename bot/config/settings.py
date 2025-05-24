@@ -26,7 +26,7 @@ class GroqAIConfig:
     MODEL: str = os.environ.get("GROQ_MODEL", "llama3-8b-8192")
 
 @dataclass
-class DeepSeekAIConfig:
+class DeepSeekConfig:
     API_KEY: str | None = os.environ.get("DEEPSEEK_API_KEY")
     MODEL: str = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
 
@@ -41,3 +41,13 @@ class DatabaseConfig:
 @dataclass
 class RedisConfig:
     URL: str = os.environ.get("REDIS_URL")
+
+@dataclass
+class StripeConfig:
+    PAYMENT_LINK: str | None = os.environ.get("STRIPE_PAYMENT_LINK")
+    WEBHOOK_SECRET: str | None = os.environ.get("STRIPE_WEBHOOK_SECRET")
+    API_KEY: str | None = os.environ.get("STRIPE_API_KEY")
+
+@dataclass
+class AppConfig:
+    ENV: str = os.environ.get("ENV", "development")
