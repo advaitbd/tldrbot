@@ -80,7 +80,12 @@ class CommandHandlers:
         if user:
             try:
                 usage_string = await self.usage_service.format_usage_string(user.id)
-                usage_info = f"\n\n*Account & Usage:*\n{usage_string}\nUpgrade anytime with /upgrade"
+                # If user is not premium, suggest upgrade
+                usage_info = f"\n\n*Account & Usage:*\n{usage_string}"
+                if not is_premium(user.id):
+                    usage_info += "\n\n*Upgrade to Premium for unlimited access* with /upgrade"
+
+
             except Exception as e:
                 logger.error(f"Error getting usage info for help command: {e}")
                 usage_info = "\n\n*Account & Usage:* Unable to load usage information"
