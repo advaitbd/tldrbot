@@ -76,6 +76,7 @@ class Bot:
             application.add_handler(CommandHandler("upgrade", self.command_handlers.upgrade_command))
             application.add_handler(CommandHandler("subscribe", self.command_handlers.upgrade_command))  # Alias
             application.add_handler(CommandHandler("usage", self.command_handlers.usage_command))
+            application.add_handler(CommandHandler("cancel_subscription", self.command_handlers.cancel_subscription_command))
             
             # Bill splitting conversation (receipt + confirmation)
             split_conv = ConversationHandler(
@@ -122,6 +123,7 @@ class Bot:
             BotCommand("list_providers", "List all valid provider names"),
             BotCommand("upgrade", "Upgrade to Premium for unlimited access"),
             BotCommand("usage", "Check your current usage statistics"),
+            BotCommand("cancel_subscription", "Cancel your premium subscription"),
             BotCommand("cancel", "Cancel current operation (like bill split)"),
         ]
         await application.bot.set_my_commands(commands)
@@ -253,7 +255,9 @@ def main():
     application = bot.setup()
 
     if StripeConfig.WEBHOOK_SECRET:
-        webhook_server = WebhookServer(bot.webhook_handlers)
+        # Get the current event loop to share with webhook server
+        main_loop = asyncio.get_event_loop()
+        webhook_server = WebhookServer(bot.webhook_handlers, main_loop)
         webhook_server.start()
 
     if TelegramConfig.WEBHOOK_URL:

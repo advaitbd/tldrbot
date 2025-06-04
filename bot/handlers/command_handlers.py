@@ -463,6 +463,47 @@ class CommandHandlers:
             if update.message:
                 await update.message.reply_text(error_message)
 
+    async def cancel_subscription_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /cancel_subscription command to cancel user's premium subscription."""
+        user = update.effective_user
+        chat = update.effective_chat
+        
+        if user is not None and chat is not None:
+            log_user_event(
+                user_id=user.id,
+                chat_id=chat.id,
+                event_type="cancel_subscription_command",
+                username=getattr(user, "username", None),
+                first_name=getattr(user, "first_name", None),
+                last_name=getattr(user, "last_name", None),
+            )
+        
+        if not user or not update.message:
+            return
+            
+        try:
+            # Call the stripe service to cancel subscription
+            result = await self.stripe_service.cancel_subscription_by_telegram_id(user.id)
+            
+            # Send appropriate response based on result
+            if result["success"]:
+                await update.message.reply_text(
+                    f"✅ {result['message']}",
+                    parse_mode="Markdown"
+                )
+            else:
+                await update.message.reply_text(
+                    f"❌ {result['message']}",
+                    parse_mode="Markdown"
+                )
+                
+        except Exception as e:
+            logger.error(f"Error in cancel subscription command for user {user.id}: {e}")
+            await update.message.reply_text(
+                "Sorry, there was an error processing your cancellation request. Please try again later.",
+                parse_mode="Markdown"
+            )
+
     async def _block_and_dm(self, telegram_id: int, update: Update):
         """Block over-quota command and send DM to user with upgrade CTA."""
         try:

@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 class StripeWebhookHandler(BaseHTTPRequestHandler):
     webhook_handlers: Optional[WebhookHandlers] = None
+    main_event_loop: Optional[asyncio.AbstractEventLoop] = None
     
     def do_POST(self):
         """Handle POST requests for Stripe webhooks."""
@@ -41,14 +42,16 @@ class StripeWebhookHandler(BaseHTTPRequestHandler):
                 mock_request = MockRequest(body, dict(self.headers))
                 
                 # Process webhook
-                if self.webhook_handlers:
-                    # Run async handler in event loop
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
+                if self.webhook_handlers and self.main_event_loop:
                     try:
-                        result = loop.run_until_complete(
-                            self.webhook_handlers.handle_stripe_webhook(mock_request)
+                        # Schedule the coroutine in the main event loop
+                        future = asyncio.run_coroutine_threadsafe(
+                            self.webhook_handlers.handle_stripe_webhook(mock_request),
+                            self.main_event_loop
                         )
+                        
+                        # Wait for the result with a timeout
+                        result = future.result(timeout=30)  # 30 second timeout
                         
                         # Send response
                         self.send_response(result['status'])
@@ -58,8 +61,19 @@ class StripeWebhookHandler(BaseHTTPRequestHandler):
                             'message': result['message']
                         }).encode())
                         
-                    finally:
-                        loop.close()
+                    except asyncio.TimeoutError:
+                        logger.error("Webhook processing timed out")
+                        self.send_response(500)
+                        self.send_header('Content-type', 'application/json')
+                        self.end_headers()
+                        self.wfile.write(b'{"error": "Webhook processing timed out"}')
+                        
+                    except Exception as e:
+                        logger.error(f"Error in webhook processing: {e}")
+                        self.send_response(500)
+                        self.send_header('Content-type', 'application/json')
+                        self.end_headers()
+                        self.wfile.write(b'{"error": "Webhook processing failed"}')
                 else:
                     self.send_response(500)
                     self.send_header('Content-type', 'application/json')
@@ -68,13 +82,13 @@ class StripeWebhookHandler(BaseHTTPRequestHandler):
                     
             elif parsed_path.path == '/health':
                 # Health check endpoint
-                if self.webhook_handlers:
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
+                if self.webhook_handlers and self.main_event_loop:
                     try:
-                        result = loop.run_until_complete(
-                            self.webhook_handlers.health_check()
+                        future = asyncio.run_coroutine_threadsafe(
+                            self.webhook_handlers.health_check(),
+                            self.main_event_loop
                         )
+                        result = future.result(timeout=10)
                         
                         self.send_response(result['status'])
                         self.send_header('Content-type', 'application/json')
@@ -83,8 +97,11 @@ class StripeWebhookHandler(BaseHTTPRequestHandler):
                             'message': result['message']
                         }).encode())
                         
-                    finally:
-                        loop.close()
+                    except asyncio.TimeoutError:
+                        self.send_response(503)
+                        self.send_header('Content-type', 'application/json')
+                        self.end_headers()
+                        self.wfile.write(b'{"error": "Health check timed out"}')
                 else:
                     self.send_response(503)
                     self.send_header('Content-type', 'application/json')
@@ -123,8 +140,9 @@ class StripeWebhookHandler(BaseHTTPRequestHandler):
         logger.info(f"Webhook server: {format % args}")
 
 class WebhookServer:
-    def __init__(self, webhook_handlers: WebhookHandlers, port: int = 8080):
+    def __init__(self, webhook_handlers: WebhookHandlers, main_event_loop: asyncio.AbstractEventLoop, port: int = 8080):
         self.webhook_handlers = webhook_handlers
+        self.main_event_loop = main_event_loop
         self.port = port
         self.server = None
         self.thread = None
@@ -132,8 +150,9 @@ class WebhookServer:
     def start(self):
         """Start the webhook server in a separate thread."""
         try:
-            # Set the webhook handlers class variable
+            # Set the webhook handlers and main event loop class variables
             StripeWebhookHandler.webhook_handlers = self.webhook_handlers
+            StripeWebhookHandler.main_event_loop = self.main_event_loop
             
             # Create server
             self.server = HTTPServer(('0.0.0.0', self.port), StripeWebhookHandler)
@@ -165,5 +184,6 @@ class WebhookServer:
             self.thread.join(timeout=5)
 
 # Usage example:
-# webhook_server = WebhookServer(webhook_handlers, port=8080)
+# main_loop = asyncio.get_event_loop()
+# webhook_server = WebhookServer(webhook_handlers, main_loop, port=8080)
 # webhook_server.start() 

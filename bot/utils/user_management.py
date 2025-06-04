@@ -5,6 +5,7 @@ Handles premium status, user creation, and Stripe customer management.
 from datetime import datetime
 from typing import Optional
 import logging
+import pytz
 
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
@@ -103,13 +104,26 @@ def is_premium(telegram_id: int) -> bool:
                 return False
             
             # Check if premium has expired
-            if user.premium_expires_at and user.premium_expires_at <= datetime.utcnow():
-                # Auto-downgrade expired premium user
-                user.premium = False
-                user.premium_expires_at = None
-                session.commit()
-                logger.info(f"Auto-downgraded expired premium user: {telegram_id}")
-                return False
+            if user.premium_expires_at:
+                # Ensure we're using timezone-aware comparison
+                now_utc = datetime.now(pytz.UTC)
+                
+                # Handle both timezone-aware and naive datetimes
+                if user.premium_expires_at.tzinfo is None:
+                    # Assume stored datetime is UTC if it's naive
+                    expires_utc = pytz.UTC.localize(user.premium_expires_at)
+                else:
+                    expires_utc = user.premium_expires_at.astimezone(pytz.UTC)
+                
+                logger.debug(f"Checking premium expiry for {telegram_id}: expires={expires_utc}, now={now_utc}")
+                
+                if expires_utc <= now_utc:
+                    # Auto-downgrade expired premium user
+                    user.premium = False
+                    user.premium_expires_at = None
+                    session.commit()
+                    logger.info(f"Auto-downgraded expired premium user: {telegram_id} (expired at {expires_utc})")
+                    return False
             
             return True
             

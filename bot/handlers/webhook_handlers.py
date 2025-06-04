@@ -5,6 +5,7 @@ Handles incoming Stripe webhooks for subscription management.
 import json
 import logging
 from typing import Dict, Any
+import stripe
 from telegram.ext import Application
 
 from services.stripe_service import StripeService
@@ -76,8 +77,14 @@ class WebhookHandlers:
                     # Send appropriate notification to user
                     await self._send_subscription_notification(event_data)
                     
-            elif event_type in ['customer.subscription.deleted', 'invoice.payment_failed']:
-                # Handle subscription cancellation/failure
+            elif event_type == 'customer.subscription.deleted':
+                # Handle actual subscription deletion (when subscription ends)
+                success = await self.stripe_service.handle_subscription_deleted(event_data)
+                if success:
+                    await self._send_downgrade_notification(event_data)
+                    
+            elif event_type == 'invoice.payment_failed':
+                # Handle payment failures
                 success = await self.stripe_service.handle_subscription_updated(event_data)
                 if success:
                     await self._send_downgrade_notification(event_data)
@@ -136,25 +143,51 @@ class WebhookHandlers:
     async def _send_subscription_notification(self, event_data: Dict):
         """Send notification for subscription updates (renewals, etc.)."""
         try:
-            subscription = event_data['data']['object']
-            customer_id = subscription['customer']
-            subscription_status = subscription['status']
+            session = event_data['data']['object']
+            customer_id = session.get('customer')
+            subscription_status = session.get('status')
+            cancel_at_period_end = session.get('cancel_at_period_end', False)
+            subscription_id = session['id']
+            subscription = stripe.Subscription.retrieve(subscription_id)
             
             # Get telegram_id from customer
             telegram_id = await self.stripe_service._get_telegram_id_from_customer(customer_id)
             
-            if telegram_id and subscription_status == 'active':
-                renewal_message = (
-                    "✅ *Premium Renewed*\n\n"
-                    "Your premium subscription has been renewed successfully.\n"
-                    "You continue to have unlimited access to all features! 🚀"
-                )
-                
-                await self.application.bot.send_message(
-                    chat_id=telegram_id,
-                    text=renewal_message,
-                    parse_mode="Markdown"
-                )
+            if telegram_id:
+                if subscription_status == 'active' and cancel_at_period_end:
+                    # Subscription is scheduled for cancellation
+                    from datetime import datetime
+                    subscription_items_list_object = subscription['items']  
+                    current_period_end_timestamp = subscription_items_list_object.data[0].current_period_end
+                    period_end = datetime.fromtimestamp(current_period_end_timestamp)
+                    period_end_str = period_end.strftime("%B %d, %Y")
+                    
+                    cancellation_message = (
+                        "📅 *Subscription Cancellation Confirmed*\n\n"
+                        f"Your premium subscription has been scheduled for cancellation.\n"
+                        f"You'll continue to have full premium access until {period_end_str}.\n\n"
+                        "If you change your mind, you can reactivate your subscription anytime before it ends."
+                    )
+
+                    await self.application.bot.send_message(
+                        chat_id=telegram_id,
+                        text=cancellation_message,
+                        parse_mode="Markdown"
+                    )
+                    
+                elif subscription_status == 'active' and not cancel_at_period_end:
+                    # Subscription renewed or reactivated
+                    renewal_message = (
+                        "✅ *Premium Renewed*\n\n"
+                        "Your premium subscription has been renewed successfully.\n"
+                        "You continue to have unlimited access to all features! 🚀"
+                    )
+                    
+                    await self.application.bot.send_message(
+                        chat_id=telegram_id,
+                        text=renewal_message,
+                        parse_mode="Markdown"
+                    )
                 
         except Exception as e:
             logger.error(f"Error sending subscription notification: {e}")

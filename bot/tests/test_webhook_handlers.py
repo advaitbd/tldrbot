@@ -190,6 +190,65 @@ class TestWebhookHandlers:
             assert args['premium'] is False
     
     @pytest.mark.asyncio
+    async def test_subscription_deleted_handler(self, stripe_service):
+        """Test subscription deletion handling."""
+        subscription_data = {
+            "type": "customer.subscription.deleted",
+            "data": {
+                "object": {
+                    "id": "sub_test",
+                    "customer": "cus_test_customer"
+                }
+            }
+        }
+        
+        with patch('utils.user_management.update_premium_status', return_value=True) as mock_update_premium, \
+             patch.object(stripe_service, '_get_telegram_id_from_customer', return_value=123456789):
+            
+            result = await stripe_service.handle_subscription_deleted(subscription_data)
+            
+            # Verify the result is True (successful processing)
+            assert result is True
+            
+            # Verify premium status was deactivated
+            mock_update_premium.assert_called_once()
+            args = mock_update_premium.call_args[1]  # Use keyword args
+            assert args['telegram_id'] == 123456789
+            assert args['premium'] is False
+            assert args['expires_at'] is None
+    
+    @pytest.mark.asyncio
+    async def test_subscription_scheduled_for_cancellation(self, stripe_service):
+        """Test subscription scheduled for cancellation (cancel_at_period_end=True)."""
+        subscription_data = {
+            "type": "customer.subscription.updated",
+            "data": {
+                "object": {
+                    "id": "sub_test",
+                    "customer": "cus_test_customer",
+                    "status": "active",
+                    "cancel_at_period_end": True,
+                    "current_period_end": 1234567890
+                }
+            }
+        }
+        
+        mock_subscription = Mock()
+        mock_subscription.current_period_end = 1234567890
+        
+        with patch('stripe.Subscription.retrieve', return_value=mock_subscription), \
+             patch.object(stripe_service, '_get_telegram_id_from_customer', return_value=123456789), \
+             patch('utils.user_management.update_premium_status') as mock_update_premium:
+            
+            result = await stripe_service.handle_subscription_updated(subscription_data)
+            
+            # Verify the result is True (successful processing)
+            assert result is True
+            
+            # Verify premium status was NOT changed (user keeps access until period end)
+            mock_update_premium.assert_not_called()
+    
+    @pytest.mark.asyncio
     async def test_premium_activation_redis_cleanup(self, stripe_service):
         """Test that premium activation clears Redis quota counters."""
         telegram_id = 123456789
