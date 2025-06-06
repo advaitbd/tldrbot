@@ -216,31 +216,73 @@ class TestQuotaLogic:
         
         # Test active premium subscription (not cancelled)
         with patch('services.usage_service.is_premium', return_value=True), \
-             patch.object(usage_service, '_get_subscription_status', return_value=(False, future_date)):
+             patch.object(usage_service, '_get_subscription_status', return_value=(False, future_date)) as mock_get_status:
             
             result = await usage_service.format_usage_string(user_id)
             
             assert "Premium user (unlimited)" in result
             assert "Next payment due:" in result
             assert future_date.strftime("%B %d, %Y") in result
+            mock_get_status.assert_called_once_with(user_id)
         
         # Test cancelled premium subscription (access until period end)
         with patch('services.usage_service.is_premium', return_value=True), \
-             patch.object(usage_service, '_get_subscription_status', return_value=(True, future_date)):
+             patch.object(usage_service, '_get_subscription_status', return_value=(True, future_date)) as mock_get_status:
             
             result = await usage_service.format_usage_string(user_id)
             
             assert "Premium user (unlimited)" in result
             assert "Premium access ends:" in result
             assert future_date.strftime("%B %d, %Y") in result
+            mock_get_status.assert_called_once_with(user_id)
         
         # Test premium user without subscription timing info (fallback)
         with patch('services.usage_service.is_premium', return_value=True), \
-             patch.object(usage_service, '_get_subscription_status', return_value=None):
+             patch.object(usage_service, '_get_subscription_status', return_value=None) as mock_get_status:
             
             result = await usage_service.format_usage_string(user_id)
             
             assert result == "✅ Premium user (unlimited)"
+            mock_get_status.assert_called_once_with(user_id)
+
+    @pytest.mark.asyncio
+    async def test_subscription_status_thread_pool_execution(self, usage_service):
+        """Test that subscription status checking uses thread pool execution properly."""
+        user_id = 12345
+        from datetime import datetime, timedelta
+        import pytz
+        
+        future_date = datetime.now(pytz.UTC) + timedelta(days=15)
+        
+        # Mock the synchronous helper methods
+        with patch.object(usage_service, '_get_user_from_db', return_value=(future_date, 'cus_test123')) as mock_db, \
+             patch.object(usage_service, '_check_stripe_subscription_status', return_value=(False, future_date)) as mock_stripe, \
+             patch('asyncio.get_event_loop') as mock_loop:
+            
+            # Mock the executor to simulate thread pool execution
+            async def mock_db_result():
+                return (future_date, 'cus_test123')
+            
+            async def mock_stripe_result():
+                return (False, future_date)
+            
+            mock_loop.return_value.run_in_executor.side_effect = [
+                # First call for database
+                mock_db_result(),
+                # Second call for Stripe
+                mock_stripe_result()
+            ]
+            
+            result = await usage_service._get_subscription_status(user_id)
+            
+            # Verify result
+            assert result == (False, future_date)
+            
+            # Verify that run_in_executor was called twice (once for DB, once for Stripe)
+            assert mock_loop.return_value.run_in_executor.call_count == 2
+            
+            # Verify the synchronous methods would have been called with correct arguments
+            # (Note: They won't actually be called due to mocking run_in_executor)
 
 
 if __name__ == "__main__":

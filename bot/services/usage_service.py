@@ -164,47 +164,95 @@ class UsageService:
         Returns:
             Tuple of (is_cancelled, expires_date) or None if error/not found
         """
+        import asyncio
+        import concurrent.futures
+        
         try:
-            # Get user from database
+            # Get user from database (run in thread pool to avoid blocking)
+            user_data = await asyncio.get_event_loop().run_in_executor(
+                None, self._get_user_from_db, telegram_id
+            )
+            
+            if not user_data:
+                return None
+            
+            expires_at, stripe_customer_id = user_data
+            
+            # Check Stripe for cancellation status (run in thread pool to avoid blocking)
+            is_cancelled, updated_expires_at = await asyncio.get_event_loop().run_in_executor(
+                None, self._check_stripe_subscription_status, stripe_customer_id, expires_at
+            )
+            
+            # Use updated expires_at from Stripe if we got one
+            final_expires_at = updated_expires_at if updated_expires_at else expires_at
+            
+            return (is_cancelled, final_expires_at)
+            
+        except Exception as e:
+            logger.error(f"Error getting subscription status for {telegram_id}: {e}")
+            return None
+    
+    def _get_user_from_db(self, telegram_id: int) -> Optional[Tuple[Optional[datetime], str]]:
+        """
+        Synchronous helper to get user data from database.
+        
+        Args:
+            telegram_id: Telegram user ID
+            
+        Returns:
+            Tuple of (expires_at, stripe_customer_id) or None if not found
+        """
+        try:
             with SessionLocal() as session:
                 user = session.query(User).filter_by(telegram_id=telegram_id).first()
                 
                 if not user or not user.premium or not user.stripe_customer_id:
                     return None
                 
-                expires_at = user.premium_expires_at
-                stripe_customer_id = user.stripe_customer_id
-            
-            # Check Stripe for cancellation status
-            is_cancelled = False
-            try:
-                # Find active subscription
-                subscriptions = stripe.Subscription.list(
-                    customer=stripe_customer_id,
-                    status='active',
-                    limit=1
-                )
+                return (user.premium_expires_at, user.stripe_customer_id)
                 
-                if subscriptions.data:
-                    subscription = subscriptions.data[0]
-                    is_cancelled = subscription.get('cancel_at_period_end', False)
-                    
-                    # If we don't have expires_at in DB, get it from Stripe
-                    if not expires_at and subscription.get('current_period_end'):
-                        expires_at = datetime.fromtimestamp(
-                            subscription['current_period_end'], 
-                            tz=pytz.UTC
-                        )
-                        
-            except Exception as e:
-                logger.warning(f"Could not fetch Stripe subscription status for {telegram_id}: {e}")
-                # Continue with database info only
-            
-            return (is_cancelled, expires_at)
-            
         except Exception as e:
-            logger.error(f"Error getting subscription status for {telegram_id}: {e}")
+            logger.error(f"Database error getting user {telegram_id}: {e}")
             return None
+    
+    def _check_stripe_subscription_status(self, stripe_customer_id: str, db_expires_at: Optional[datetime]) -> Tuple[bool, Optional[datetime]]:
+        """
+        Synchronous helper to check Stripe subscription status.
+        
+        Args:
+            stripe_customer_id: Stripe customer ID
+            db_expires_at: Expiry date from database
+            
+        Returns:
+            Tuple of (is_cancelled, expires_at)
+        """
+        is_cancelled = False
+        expires_at = db_expires_at
+        
+        try:
+            # Find active subscription
+            subscriptions = stripe.Subscription.list(
+                customer=stripe_customer_id,
+                status='active',
+                limit=1
+            )
+            
+            if subscriptions.data:
+                subscription = subscriptions.data[0]
+                is_cancelled = subscription.get('cancel_at_period_end', False)
+                
+                # If we don't have expires_at in DB, get it from Stripe
+                if not expires_at and subscription.get('current_period_end'):
+                    expires_at = datetime.fromtimestamp(
+                        subscription['current_period_end'], 
+                        tz=pytz.UTC
+                    )
+                    
+        except Exception as e:
+            logger.warning(f"Could not fetch Stripe subscription status for customer {stripe_customer_id}: {e}")
+            # Continue with database info only
+        
+        return (is_cancelled, expires_at)
     
     async def clear_premium_user_quotas(self, telegram_id: int) -> bool:
         """
