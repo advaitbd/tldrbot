@@ -3,12 +3,21 @@ Usage service that combines quota management with premium user logic.
 Handles all usage tracking and enforcement for freemium functionality.
 """
 import logging
-from typing import Dict
+from datetime import datetime
+from typing import Dict, Optional, Tuple
+import pytz
+import stripe
 
+from config.settings import StripeConfig
 from utils.quota_manager import QuotaManager
-from utils.user_management import is_premium, get_or_create_user
+from utils.user_management import is_premium, get_or_create_user, check_premium_expiry
+from utils.analytics_storage import SessionLocal, User
 
 logger = logging.getLogger(__name__)
+
+# Configure Stripe
+if StripeConfig.API_KEY:
+    stripe.api_key = StripeConfig.API_KEY
 
 class UsageService:
     def __init__(self):
@@ -119,16 +128,83 @@ class UsageService:
             telegram_id: Telegram user ID
             
         Returns:
-            Formatted usage string
+            Formatted usage string with subscription timing information
         """
         stats = await self.get_usage_stats(telegram_id)
         
         if stats['premium']:
-            return "✅ Premium user (unlimited)"
+            # Get detailed subscription status for premium users
+            subscription_info = await self._get_subscription_status(telegram_id)
+            
+            if subscription_info:
+                is_cancelled, expires_date = subscription_info
+                if expires_date:
+                    formatted_date = expires_date.strftime("%B %d, %Y")
+                    
+                    if is_cancelled:
+                        return f"✅ Premium user (unlimited)\n📅 Premium access ends: {formatted_date}"
+                    else:
+                        return f"✅ Premium user (unlimited)\n📅 Next payment due: {formatted_date}"
+                else:
+                    return "✅ Premium user (unlimited)"
+            else:
+                return "✅ Premium user (unlimited)"
         
         return (f"Today: {stats['daily']}/{stats['daily_limit']} · "
                 f"Month: {stats['monthly']}/{stats['monthly_limit']} · "
                 f"Groups: {stats['groups']}/{stats['group_limit']} (Free)")
+    
+    async def _get_subscription_status(self, telegram_id: int) -> Optional[Tuple[bool, Optional[datetime]]]:
+        """
+        Get subscription status for a premium user.
+        
+        Args:
+            telegram_id: Telegram user ID
+            
+        Returns:
+            Tuple of (is_cancelled, expires_date) or None if error/not found
+        """
+        try:
+            # Get user from database
+            with SessionLocal() as session:
+                user = session.query(User).filter_by(telegram_id=telegram_id).first()
+                
+                if not user or not user.premium or not user.stripe_customer_id:
+                    return None
+                
+                expires_at = user.premium_expires_at
+                stripe_customer_id = user.stripe_customer_id
+            
+            # Check Stripe for cancellation status
+            is_cancelled = False
+            try:
+                # Find active subscription
+                subscriptions = stripe.Subscription.list(
+                    customer=stripe_customer_id,
+                    status='active',
+                    limit=1
+                )
+                
+                if subscriptions.data:
+                    subscription = subscriptions.data[0]
+                    is_cancelled = subscription.get('cancel_at_period_end', False)
+                    
+                    # If we don't have expires_at in DB, get it from Stripe
+                    if not expires_at and subscription.get('current_period_end'):
+                        expires_at = datetime.fromtimestamp(
+                            subscription['current_period_end'], 
+                            tz=pytz.UTC
+                        )
+                        
+            except Exception as e:
+                logger.warning(f"Could not fetch Stripe subscription status for {telegram_id}: {e}")
+                # Continue with database info only
+            
+            return (is_cancelled, expires_at)
+            
+        except Exception as e:
+            logger.error(f"Error getting subscription status for {telegram_id}: {e}")
+            return None
     
     async def clear_premium_user_quotas(self, telegram_id: int) -> bool:
         """

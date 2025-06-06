@@ -205,6 +205,43 @@ class TestQuotaLogic:
             result = await usage_service.format_usage_string(user_id)
             assert "Premium user (unlimited)" in result
 
+    @pytest.mark.asyncio
+    async def test_premium_subscription_status_messaging(self, usage_service):
+        """Test that premium users see appropriate subscription timing messages."""
+        user_id = 12345
+        from datetime import datetime, timedelta
+        import pytz
+        
+        future_date = datetime.now(pytz.UTC) + timedelta(days=15)
+        
+        # Test active premium subscription (not cancelled)
+        with patch('services.usage_service.is_premium', return_value=True), \
+             patch.object(usage_service, '_get_subscription_status', return_value=(False, future_date)):
+            
+            result = await usage_service.format_usage_string(user_id)
+            
+            assert "Premium user (unlimited)" in result
+            assert "Next payment due:" in result
+            assert future_date.strftime("%B %d, %Y") in result
+        
+        # Test cancelled premium subscription (access until period end)
+        with patch('services.usage_service.is_premium', return_value=True), \
+             patch.object(usage_service, '_get_subscription_status', return_value=(True, future_date)):
+            
+            result = await usage_service.format_usage_string(user_id)
+            
+            assert "Premium user (unlimited)" in result
+            assert "Premium access ends:" in result
+            assert future_date.strftime("%B %d, %Y") in result
+        
+        # Test premium user without subscription timing info (fallback)
+        with patch('services.usage_service.is_premium', return_value=True), \
+             patch.object(usage_service, '_get_subscription_status', return_value=None):
+            
+            result = await usage_service.format_usage_string(user_id)
+            
+            assert result == "✅ Premium user (unlimited)"
+
 
 if __name__ == "__main__":
     pytest.main([__file__]) 
