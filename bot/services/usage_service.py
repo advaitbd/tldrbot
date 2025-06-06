@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Dict, Optional, Tuple
 import pytz
 import stripe
+import asyncio
 
 from config.settings import StripeConfig
 from utils.quota_manager import QuotaManager
@@ -60,8 +61,7 @@ class UsageService:
         """
         try:
             # Ensure user exists in database
-            get_or_create_user(telegram_id)
-            
+            await asyncio.get_running_loop().run_in_executor(None, get_or_create_user, telegram_id)
             # Premium users don't need counter tracking
             if is_premium(telegram_id):
                 logger.info(f"Premium user {telegram_id} - skipping counter increment")
@@ -90,7 +90,7 @@ class UsageService:
         """
         try:
             # Ensure user exists in database
-            get_or_create_user(telegram_id)
+            await asyncio.get_running_loop().run_in_executor(None, get_or_create_user, telegram_id)
             
             if is_premium(telegram_id):
                 return {
@@ -164,9 +164,6 @@ class UsageService:
         Returns:
             Tuple of (is_cancelled, expires_date) or None if error/not found
         """
-        import asyncio
-        import concurrent.futures
-        
         try:
             # Get user from database (run in thread pool to avoid blocking)
             user_data = await asyncio.get_event_loop().run_in_executor(
@@ -284,7 +281,7 @@ class UsageService:
         try:
             redis_ok = await self.quota_manager.health_check()
             # Test database by checking if we can create a user
-            test_user = get_or_create_user(999999999)  # Test with dummy ID
+            test_user = await asyncio.get_running_loop().run_in_executor(None, get_or_create_user, 999999999)  # Test with dummy ID
             db_ok = test_user is not None
             
             return redis_ok and db_ok
