@@ -1,327 +1,503 @@
-# TLDRBot
+# TeleBot
 
-A powerful Telegram bot that enhances group productivity through AI-powered conversation management, bill splitting, and media handling. Built with Python and modern AI models, tldrbot helps teams stay organized and efficient in their group chats.
+A production-ready Telegram bot with freemium functionality, AI-powered conversation management, and integrated payment processing. Built with Python, Redis, PostgreSQL, and Stripe integration for scalable deployment.
 
 ## 🌟 Key Features
 
-### 1. Smart Conversation Management
-- **AI-Powered Summaries**: Use `/tldr` to get concise summaries of recent chat messages
-  - Extracts key points, sentiment, and events
-  - Configurable message range (default: 50, max: 400)
-  - Supports multiple AI models for different quality/performance needs
+### 🎯 **Freemium Business Model**
+- **Free Tier**: 5 daily, 100 monthly summaries, 3 groups max
+- **Premium Tier**: Unlimited access with Stripe integration
+- **Real-time Quota Tracking**: Redis-based usage monitoring
+- **Graceful Degradation**: Premium users bypass quotas during outages
 
-### 2. Intelligent Bill Splitting
-- **Receipt Processing**: Upload receipt photos with payment context
-- **Smart OCR**: Uses AI for accurate text extraction
-- **Flexible Payment Matching**:\
-  Individual items: "Alice: Burger, Bob: Salad"\
-  Shared items: "Shared: Drinks"\
-  Automatic tax and service charge calculations
-- **Interactive Flow**: Confirmation steps to ensure accuracy
+### 🤖 **AI-Powered Conversation Management**
+- **Smart Summaries**: `/summarize` command with configurable message count
+- **Multi-Model Support**: OpenAI, Groq, DeepSeek with strategy pattern
+- **Context-Aware Responses**: Reply chains and conversation threading
+- **Quality Controls**: Content filtering and rate limiting
 
-### 3. Media Handling
-- **Video Downloads**: `/dl` command for short-form videos
-  - Supports TikTok videos
-  - Direct download in chat
+### 💳 **Production Payment System**
+- **Stripe Integration**: Secure payment processing with webhooks
+- **Subscription Management**: Automatic renewals, cancellations, grace periods
+- **Real-time Status Sync**: Instant premium activation/deactivation
+- **Payment Links**: Dynamic checkout with Telegram ID tracking
 
-### 4. Multi-Model AI Support
-- Switch between different AI models:
-  - OpenAI (GPT models)
-  - Groq (Llama 3)
-  - DeepSeek
-- Use `/switch_model` to change models based on needs
-- Set your own API key with `/set_api_key`
+### 📊 **Enterprise-Grade Infrastructure**
+- **Redis Caching**: High-performance quota management and session storage
+- **PostgreSQL Database**: Reliable user data and analytics storage
+- **Health Monitoring**: Comprehensive health checks and error tracking
+- **Webhook Security**: Stripe signature verification and replay protection
 
-## 🛠️ Technical Architecture
+## 🏗️ Technical Architecture
 
-### Core Components
+### 🧩 Core Components
 
-1. **Command Handlers**
-   - Manages all bot commands
-   - Implements conversation flows
-   - Handles user interactions
+#### **1. Freemium Management Layer**
+- **UsageService**: Centralized quota checking and counter management
+- **QuotaManager**: Redis-based usage tracking with automatic resets
+- **Premium Logic**: Bypass mechanisms and fail-safe blocking
+- **Analytics**: User behavior tracking and conversion metrics
 
-2. **Message Handlers**
-   - Processes regular messages
-   - Manages context-aware responses
-   - Handles reply chains
+#### **2. Payment Processing**
+- **StripeService**: Webhook handling, subscription management
+- **WebhookHandlers**: Secure event processing with signature verification
+- **User Management**: Premium status synchronization
+- **Error Recovery**: Retry logic and graceful failure handling
 
-3. **AI Service**
-   - Strategy pattern for multiple AI models
-   - Handles summarization
-   - OCR processing for receipts
+#### **3. AI Services**
+- **Strategy Pattern**: Pluggable AI model architecture
+- **Model Management**: OpenAI, Groq, DeepSeek providers
+- **Response Processing**: Context-aware summarization
+- **Performance Monitoring**: Response time and quality tracking
 
-4. **Memory Storage**
-   - In-memory message storage
-   - Efficient chat history management (stores up to 400 messages)
-   - Persistent database for analytics
+#### **4. Data Layer**
+- **PostgreSQL**: User profiles, subscription data, analytics
+- **Redis**: Session storage, quota counters, rate limiting
+- **Memory Storage**: Chat history buffering (400 messages)
+- **Health Checks**: Database and cache connectivity monitoring
 
-5. **Bill Splitting System**
-   - **Receipt Processing Pipeline**:
-     - OCR using Mistral AI for text extraction
-     - AI-powered receipt data structuring
-     - Pydantic models for data validation
+#### **5. Bot Framework**
+- **Command Handlers**: Core bot functionality with quota enforcement
+- **Message Handlers**: Reply processing and conversation management
+- **Webhook Integration**: Stripe event processing
+- **Error Handling**: Comprehensive logging and recovery mechanisms
 
-   - **Context Analysis**:
-     - LLM-based payment context parsing
-     - Smart item-to-person matching
-     - Shared item detection
+## 🚀 Quick Start
 
-   - **Calculation Engine**:
-     - Proportional tax and service charge distribution
-     - Individual and shared item cost calculations
-     - Validation against receipt totals
+### 📋 Prerequisites
+- **Python 3.10+** (recommended: 3.11 for best performance)
+- **Redis** (6.0+) for quota management and caching
+- **PostgreSQL** (12+) for user data and analytics
+- **Telegram Bot Token** from [@BotFather](https://t.me/botfather)
+- **API Keys** for AI services (at least one required)
+- **Stripe Account** (optional, for payment processing)
 
-   - **Conversation Flow**:
-     - Multi-step confirmation process
-     - Error handling and recovery
-     - User-friendly result formatting
+### ⚡ Development Setup
 
-## 🚀 Getting Started
+#### 1. **Clone and Setup Environment**
+```bash
+# Clone the repository
+git clone https://github.com/your-org/telebot.git
+cd telebot
 
-### Prerequisites
-- Python 3.10 or higher
-- Telegram Bot Token
-- API keys for desired AI services (OpenAI, Groq, DeepSeek)
-- Redis instance
-- PostgreSQL or compatible database
+# Create virtual environment
+python3.11 -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
-### Installation
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/advaitbd/tldrbot.git
-   cd tldrbot
-   ```
-
-2. Create and activate virtual environment:
-   ```bash
-   python -m venv .venv
-   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-   ```
-
-3. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. Set up environment variables:
-   ```bash
-   # Required
-   BOT_TOKEN=your_telegram_bot_token
-
-   # Optional (based on AI models you want to use)
-   OPENAI_API_KEY=your_openai_key
-   OPENAI_MODEL=gpt-4o-mini  # Optional, defaults to gpt-4o-mini
-   GROQ_API_KEY=your_groq_key
-   GROQ_MODEL=llama3-8b-8192  # Optional, defaults to llama3-8b-8192
-   DEEPSEEK_API_KEY=your_deepseek_key
-   DEEPSEEK_MODEL=deepseek-chat  # Optional, defaults to deepseek-chat
-
-   # Required
-   MISTRAL_API_KEY=your_mistral_key # For OCR in the bill splitting feature
-
-   # Optional (for webhook deployment)
-   WEBHOOK_URL=your_webhook_url
-   PORT=your_port
-
-   # Required for Redis and database
-   REDIS_URL=redis://<host>:<port>/<db>
-   DATABASE_URL=postgresql://user:password@host:port/dbname
-
-   # Optional for content filtering
-   CENSOR=comma,separated,words
-   ```
-
-5. Run the bot:
-   ```bash
-   python -m bot.main
-   ```
-
-## 📝 Usage Guide
-
-### Basic Commands
-- `/help` - Show all available commands
-- `/tldr [number]` - Summarize last N messages
-- `/splitbill` - Start bill splitting process
-- `/dl <url>` - Download short-form video
-- `/switch_model <model>` - Change AI model
-- `/set_api_key` - Set your own API key for a provider
-- `/clear_api_key` - Remove your API key for a provider
-- `/cancel` - Cancel current operation
-
-### Bill Splitting Flow
-1. Send `/splitbill`
-2. Upload receipt photo
-3. Add caption with payment context
-4. Confirm or cancel the split
-
-### Model Switching
-Available models:
-- `openai` - OpenAI's GPT models (default: gpt-4o-mini)
-- `groq` - Groq's Llama 3 (default: llama3-8b-8192)
-- `deepseek` - DeepSeek models (default: deepseek-chat)
-
-## 🔧 Development
-
-### Project Structure
-```
-tldrbot/
-├── bot/
-│   ├── config/         # Configuration settings
-│   ├── handlers/       # Command and message handlers
-│   │   ├── conversations/ # Conversation handlers
-│   │   ├── command_handlers.py # Main command handlers
-│   │   └── message_handlers.py # Message handlers
-│   ├── services/       # Core services
-│   │   ├── ai/         # AI model strategies
-│   │   ├── bill_splitter.py # Bill splitting logic
-│   │   ├── redis_queue.py # Redis job queue
-│   │   └── telegram_service.py # Telegram API wrapper
-│   ├── utils/          # Utility functions
-│   │   ├── analytics_storage.py # Database storage
-│   │   ├── memory_storage.py # In-memory message storage
-│   │   └── text_processor.py # Text formatting
-│   └── main.py         # Bot entry point
-├── pyproject.toml      # Project metadata
-├── requirements.txt    # Dependencies
-└── README.md           # Documentation
+# Install dependencies
+pip install -r requirements.txt
 ```
 
-### Extending the Bot
-1. **New Commands**:
-   - Add handler in `bot/handlers/command_handlers.py`
-   - Register in `bot/main.py`
+#### 2. **Database Setup**
+```bash
+# Start PostgreSQL (example with Docker)
+docker run --name telebot-postgres \
+  -e POSTGRES_DB=telebot \
+  -e POSTGRES_USER=telebot \
+  -e POSTGRES_PASSWORD=your_password \
+  -p 5432:5432 -d postgres:14
 
-2. **New AI Models**:
-   - Implement strategy in `bot/services/ai/`
-   - Add to strategy registry
+# Start Redis (example with Docker)
+docker run --name telebot-redis \
+  -p 6379:6379 -d redis:7-alpine
+```
 
-3. **Persistent Storage**:
-   - Replace `MemoryStorage` with database implementation
-   - Update storage interface
+#### 3. **Environment Configuration**
+Create `.env` file in the project root:
+
+```bash
+# === REQUIRED SETTINGS ===
+# Telegram Bot Token from @BotFather
+BOT_TOKEN=1234567890:ABCdefGHIjklMNOpqrsTUVwxyz
+
+# Database connections
+DATABASE_URL=postgresql://telebot:your_password@localhost:5432/telebot
+REDIS_URL=redis://localhost:6379/0
+
+# AI Service (at least one required)
+OPENAI_API_KEY=sk-...your_openai_key
+# OR
+GROQ_API_KEY=gsk_...your_groq_key
+# OR  
+DEEPSEEK_API_KEY=sk-...your_deepseek_key
+
+# === OPTIONAL SETTINGS ===
+# AI Model Configuration
+OPENAI_MODEL=gpt-4o-mini          # Default: gpt-4o-mini
+GROQ_MODEL=llama3-8b-8192         # Default: llama3-8b-8192  
+DEEPSEEK_MODEL=deepseek-chat      # Default: deepseek-chat
+
+# Payment Processing (for production)
+STRIPE_API_KEY=sk_live_...        # Your Stripe secret key
+STRIPE_WEBHOOK_SECRET=whsec_...   # Webhook endpoint secret
+STRIPE_PAYMENT_LINK=https://buy.stripe.com/...  # Payment link
+
+# Production Deployment
+WEBHOOK_URL=https://your-domain.com/webhook/telegram
+PORT=8000
+
+# Content Filtering
+CENSOR=spam,abuse,inappropriate   # Comma-separated blocked words
+
+# Environment
+ENVIRONMENT=development           # development|staging|production
+```
+
+#### 4. **Database Migration**
+```bash
+# Navigate to bot directory
+cd bot
+
+# Initialize database (creates tables)
+python -c "
+from utils.analytics_storage import init_db
+init_db()
+print('✅ Database initialized successfully')
+"
+```
+
+#### 5. **Run Development Server**
+```bash
+# From the bot/ directory
+python main.py
+
+# You should see:
+# ✅ Bot started successfully
+# ✅ Database connection healthy
+# ✅ Redis connection healthy  
+# 🤖 Bot is running...
+```
+
+## 🧪 Testing
+
+### **Run Test Suite**
+```bash
+# Run all tests with coverage
+cd bot
+python -m pytest tests/ -v --tb=short
+
+# Run specific test categories
+python -m pytest tests/test_quota_logic.py -v          # Quota management tests
+python -m pytest tests/test_webhook_handlers.py -v     # Payment processing tests  
+python -m pytest tests/test_integration.py -v          # End-to-end integration tests
+
+# Run with coverage report
+python -m pytest tests/ --cov=. --cov-report=html
+```
+
+### **Test Categories**
+- **🎯 Quota Logic**: Freemium enforcement, Redis operations, premium bypass
+- **💳 Webhook Handlers**: Stripe integration, payment processing, security
+- **🔗 Integration**: End-to-end workflows, database operations, error recovery
+
+### **Mock Services for Testing**
+All external dependencies are properly mocked:
+- ✅ Stripe API calls
+- ✅ Redis operations  
+- ✅ Database transactions
+- ✅ AI service responses
+- ✅ Telegram API calls
+
+## 📱 Usage Guide
+
+### **Core Commands**
+```bash
+/help          # Show available commands and usage statistics
+/summarize     # AI-powered chat summary (respects quotas)
+/usage         # Check your quota usage and subscription status  
+/upgrade       # Get premium subscription link
+/cancel        # Cancel any ongoing operation
+```
+
+### **Freemium System**
+- **Free Users**: 5 daily summaries, 100 monthly, max 3 groups
+- **Premium Users**: Unlimited access to all features  
+- **Quota Enforcement**: Automatic blocking when limits exceeded
+- **Grace Period**: Premium users maintain access during payment issues
+
+### **AI Models**
+The bot supports multiple AI providers with automatic fallback:
+- **OpenAI**: GPT-4o-mini (default) - Balanced performance and cost
+- **Groq**: Llama 3-8B - Fast inference, good quality
+- **DeepSeek**: DeepSeek-Chat - Cost-effective alternative
+
+## 🔧 Development Guide
+
+### **Project Structure**
+```
+telebot/
+├── bot/                              # Main application code
+│   ├── config/                       # Configuration management
+│   │   ├── settings.py              # Environment variables and settings
+│   │   └── __init__.py
+│   ├── data/                         # Data storage
+│   │   └── bot.db                   # SQLite database (development)
+│   ├── handlers/                     # Request handlers
+│   │   ├── conversations/           # Multi-step conversation flows  
+│   │   ├── command_handlers.py      # Bot command processors
+│   │   ├── message_handlers.py      # Message and reply handlers
+│   │   └── webhook_handlers.py      # Stripe webhook processors
+│   ├── services/                     # Business logic layer
+│   │   ├── ai/                      # AI model strategies
+│   │   │   ├── openai_service.py    # OpenAI integration
+│   │   │   ├── groq_service.py      # Groq integration
+│   │   │   └── deepseek_service.py  # DeepSeek integration
+│   │   ├── usage_service.py         # Quota management service
+│   │   └── stripe_service.py        # Payment processing
+│   ├── tests/                        # Test suites
+│   │   ├── test_quota_logic.py      # Freemium functionality tests
+│   │   ├── test_webhook_handlers.py # Payment processing tests
+│   │   └── test_integration.py      # End-to-end tests
+│   ├── utils/                        # Utility modules
+│   │   ├── quota_manager.py         # Redis-based quota tracking
+│   │   ├── user_management.py       # User CRUD operations
+│   │   ├── analytics_storage.py     # Database operations
+│   │   └── memory_storage.py        # Chat history management
+│   ├── main.py                       # Application entry point
+│   └── pytest.ini                   # Test configuration
+├── pm/                               # Project management
+│   ├── architecture.md              # System architecture docs
+│   └── implementation_tasks.md      # Development roadmap
+├── requirements.txt                  # Python dependencies
+├── SQLite_Setup.md                  # Database setup guide
+└── README.md                        # This file
+```
+
+### **🚀 Adding New Features**
+
+#### **1. New Bot Commands**
+```python
+# In bot/handlers/command_handlers.py
+
+async def new_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle new command with quota checking."""
+    user = update.effective_user
+    chat_id = update.effective_chat.id
+    
+    # Check quota first
+    if not await self.usage_service.within_quota(user.id, chat_id):
+        await self._block_and_dm(user.id, update)
+        return
+    
+    # Your command logic here
+    
+    # Increment usage counters
+    await self.usage_service.increment_counters(user.id, chat_id)
+
+# Register in main.py
+application.add_handler(CommandHandler("newcmd", command_handlers.new_command))
+```
+
+#### **2. New AI Model Provider**
+```python
+# Create bot/services/ai/newprovider_service.py
+
+from services.ai.base_ai_service import BaseAIService
+
+class NewProviderService(BaseAIService):
+    def __init__(self):
+        self.api_key = settings.NEW_PROVIDER_API_KEY
+        self.model = settings.NEW_PROVIDER_MODEL
+    
+    def get_response(self, prompt: str) -> str:
+        # Implement your provider's API call
+        pass
+
+# Register in bot/services/ai/__init__.py
+```
+
+#### **3. Custom Webhook Handlers**
+```python
+# In bot/handlers/webhook_handlers.py
+
+async def handle_custom_webhook(self, event_data: Dict) -> bool:
+    """Handle custom webhook events."""
+    try:
+        # Process your webhook data
+        return True
+    except Exception as e:
+        logger.error(f"Error handling custom webhook: {e}")
+        return False
+```
+
+### **🔍 Debugging and Monitoring**
+
+#### **Health Checks**
+```bash
+# Check system health
+curl http://localhost:8000/health
+
+# Check individual components
+python -c "
+from services.usage_service import UsageService
+from services.stripe_service import StripeService
+
+usage = UsageService()
+stripe = StripeService()
+
+print('Usage Service:', await usage.health_check())
+print('Stripe Service:', stripe.get_payment_link() is not None)
+"
+```
+
+#### **Logs and Metrics**
+- **Application Logs**: Standard Python logging to console/file
+- **Usage Analytics**: Stored in PostgreSQL `analytics` table
+- **Error Tracking**: Comprehensive exception logging with context
+- **Performance Metrics**: Response times, quota check duration
+
+### **🌐 Production Deployment**
+
+#### **Environment Setup**
+```bash
+# Production environment variables
+ENVIRONMENT=production
+WEBHOOK_URL=https://yourdomain.com
+BOT_TOKEN=your_production_bot_token
+
+# Database (managed service recommended)
+DATABASE_URL=postgresql://user:pass@prod-db:5432/telebot
+
+# Redis (managed service recommended)  
+REDIS_URL=redis://prod-redis:6379/0
+
+# Stripe (live keys)
+STRIPE_API_KEY=sk_live_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+```
+
+#### **Docker Deployment**
+```dockerfile
+# Dockerfile example
+FROM python:3.11-slim
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+
+COPY bot/ ./bot/
+EXPOSE 8000
+
+CMD ["python", "bot/main.py"]
+```
+
+#### **Health Monitoring**
+The bot includes comprehensive health checks:
+- ✅ Database connectivity
+- ✅ Redis connectivity  
+- ✅ Stripe API accessibility
+- ✅ AI service availability
+- ✅ Webhook endpoint status
+
+### **🛡️ Security Considerations**
+
+- **Environment Variables**: Never commit secrets to version control
+- **Webhook Security**: Stripe signature verification implemented
+- **Rate Limiting**: Redis-based quota enforcement prevents abuse
+- **Input Validation**: All user inputs are sanitized and validated
+- **Database Security**: Parameterized queries prevent SQL injection
+- **Error Handling**: Sensitive information never exposed in error messages
 
 ## 🤝 Contributing
-Contributions are welcome! Please feel free to submit a Pull Request.
+
+### **Development Workflow**
+1. **Fork the repository** and create a feature branch
+2. **Set up development environment** following the quick start guide
+3. **Run tests** to ensure everything works: `python -m pytest tests/ -v`
+4. **Implement your feature** with appropriate quota checking
+5. **Add tests** for new functionality
+6. **Update documentation** as needed
+7. **Submit a pull request** with clear description
+
+### **Code Standards**
+- **Type Hints**: All functions should have proper type annotations
+- **Async/Await**: Use async patterns for I/O operations
+- **Error Handling**: Comprehensive try/catch with logging
+- **Testing**: Unit tests required for all new features
+- **Documentation**: Docstrings for all public functions
+
+### **Pull Request Checklist**
+- [ ] All tests pass (`python -m pytest tests/ -v`)
+- [ ] New functionality includes appropriate tests
+- [ ] Quota checking implemented for user-facing features
+- [ ] Error handling and logging added
+- [ ] Documentation updated
+- [ ] No hardcoded secrets or credentials
 
 ## 📄 License
-This project is licensed under the MIT License - see the LICENSE file for details.
 
-## 🚦 Background Job Queueing with Redis
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-**LLM-powered commands** (like `/tldr`) are handled via a Redis-backed job queue for maximum responsiveness and reliability.
+## 🙋‍♂️ Support
 
-- When a user calls `/tldr`, the bot **immediately replies** that the summary is being prepared.
-- The request is **queued in Redis**.
-- A **background worker** (part of the bot process) picks up the job, runs the LLM, and sends the summary as a new message in the chat.
-- This ensures the bot remains responsive, even if the LLM is slow or under heavy load.
+### **Getting Help**
+- 📖 **Documentation**: Check this README and `/pm/architecture.md`
+- 🐛 **Bug Reports**: Create an issue with reproduction steps
+- 💡 **Feature Requests**: Open an issue with detailed description
+- 🔧 **Development Help**: Check existing issues and discussions
 
-#### Sample User Experience
+### **Troubleshooting**
 
-```
-User: /tldr 30
+#### **Common Issues**
 
-Bot (immediately): Summarizing... I'll send the summary here when it's ready! 📝
+**Bot not starting:**
+```bash
+# Check environment variables
+python -c "from config.settings import *; print('✅ Config loaded')"
 
-Bot (a few seconds later):
-_Conversation summarized for the last 30 messages:_
-Summary: ...
-```
+# Verify database connection
+python -c "from utils.analytics_storage import SessionLocal; print('✅ DB connected')"
 
-## 📊 Analytics & Event Logging
-
-- tldrbot logs all user interactions and commands to a relational database for analytics and monitoring.
-- Events are stored in a `user_events` table with user, chat, event type, and timestamp.
-- This enables usage tracking, feature analytics, and debugging.
-
-#### Environment Variable
-- `DATABASE_URL` (required): SQLAlchemy-compatible database URL (e.g., for Postgres).
-
-#### Setup
-- The bot will automatically create the required table on startup if it does not exist.
-
-#### Example Table Schema
-
-| Column      | Type         | Description                |
-|-------------|--------------|----------------------------|
-| id          | Integer      | Primary key                |
-| user_id     | BigInteger   | Telegram user ID           |
-| username    | String       | Telegram username          |
-| first_name  | String       | User's first name          |
-| last_name   | String       | User's last name           |
-| chat_id     | BigInteger   | Telegram chat ID           |
-| event_type  | String       | Type of event/command      |
-| timestamp   | DateTime     | When the event occurred    |
-| extra       | Text         | Optional extra data (JSON) |
-| llm_name    | String       | Name of the LLM used       |
-
-## 🏗️ System Flow
-
-```mermaid
-graph TD
-    User["User"] -- Telegram --> TLDRBotApplication["TLDRBot"]
-
-    subgraph TLDRBotApplication
-        direction TB
-        TelegramInterface["Telegram API Interface\n(python-telegram-bot)"]:::main
-
-        TelegramInterface --> RequestRouter["Update Router"]:::main
-
-        RequestRouter -- "/command" --> CommandHandlers["Command Handlers"]:::main
-        CommandHandlers -- "LLM Job" --> RedisQueue["Redis Job Queue"]:::queue
-        RedisQueue -- "Job" --> LLMWorker["Background LLM Worker"]:::worker
-        LLMWorker -- "Summary" --> TelegramInterface
-
-        RequestRouter -- "message" --> MessageHandlers["Message Handlers"]:::main
-        MessageHandlers --> AIService
-        MessageHandlers --> MemoryStorageService
-
-        subgraph Services["Core Services"]
-            direction LR
-            AIService --> AIModels["AI Models\n(OpenAI, Groq, DeepSeek)"]:::ai
-            MemoryStorageService --> InMemoryDataStore["In-Memory Data Store"]:::storage
-        end
-
-        CommandHandlers --> MemoryStorageService
-        CommandHandlers --> VideoDownloadService
-        CommandHandlers --> BillSplittingService
-        CommandHandlers -- "Analytics Event" --> AnalyticsDB["Analytics Storage (SQL DB)"]:::analytics
-        MessageHandlers -- "Analytics Event" --> AnalyticsDB
-    end
-
-    TelegramInterface -- Telegram --> User
-
-    %% Color Classes
-    classDef main fill:#e3f2fd,stroke:#1976d2,stroke-width:2px,color:#222;
-    classDef ai fill:#ede7f6,stroke:#7b1fa2,stroke-width:2px,color:#222;
-    classDef queue fill:#fffde7,stroke:#fbc02d,stroke-width:2px,color:#222;
-    classDef worker fill:#e1f5fe,stroke:#0288d1,stroke-width:2px,color:#222;
-    classDef storage fill:#e8f5e9,stroke:#388e3c,stroke-width:2px,color:#222;
-    classDef analytics fill:#f3e5f5,stroke:#8e24aa,stroke-width:2px,color:#222;
+# Test Redis connection
+python -c "import redis; r=redis.from_url('redis://localhost:6379'); r.ping(); print('✅ Redis connected')"
 ```
 
-## ⚙️ Environment Variables (Updated)
+**Tests failing:**
+```bash
+# Clean test environment
+cd bot
+python -m pytest tests/ -v --tb=long
 
-Add to your `.env` or Railway variables:
-
-```
-BOT_TOKEN=your_telegram_bot_token
-OPENAI_API_KEY=your_openai_key
-GROQ_API_KEY=your_groq_key
-DEEPSEEK_API_KEY=your_deepseek_key
-MISTRAL_API_KEY=your_mistral_key
-WEBHOOK_URL=your_webhook_url
-PORT=your_port
-REDIS_URL=redis://<host>:<port>/<db>
-DATABASE_URL=postgresql://user:password@host:port/dbname
+# Check for missing environment variables
+python -c "import os; print([k for k in os.environ if 'TEST' in k])"
 ```
 
-- On Railway, `REDIS_URL` is provided by the Redis plugin.
-- `DATABASE_URL` is required for analytics logging (Postgres recommended).
-- Locally, you can use a local Redis instance or a cloud Redis URL.
+**Quota system not working:**
+```bash
+# Verify Redis quota keys
+redis-cli KEYS "usage:*"
+redis-cli KEYS "groups:*"
 
-## 🏁 Getting Started (Updated)
+# Check quota manager
+python -c "from utils.quota_manager import QuotaManager; qm=QuotaManager(); print('✅ Quota manager ready')"
+```
 
-1. **Provision a Redis instance** (e.g., Railway Redis plugin, or local Redis).
-2. **Provision a Postgres (or compatible) database** for analytics.
-3. **Set `REDIS_URL` and `DATABASE_URL`** in your environment.
-4. **Run the bot as before.**
+### **Performance Optimization**
+- **Redis Connection Pooling**: Configured automatically
+- **Database Connection Management**: SQLAlchemy session handling
+- **Async Operations**: Non-blocking I/O for scalability
+- **Caching Strategy**: Redis for session data, memory for chat history
+- **Error Recovery**: Graceful degradation and retry logic
+
+---
+
+## 🚀 Quick Commands Reference
+
+```bash
+# Development
+python main.py                              # Start bot
+python -m pytest tests/ -v                  # Run tests
+python -c "from utils.analytics_storage import init_db; init_db()"  # Setup DB
+
+# Production
+docker build -t telebot .                   # Build container
+docker run -p 8000:8000 telebot            # Run container
+curl http://localhost:8000/health           # Health check
+
+# Debugging  
+redis-cli MONITOR                           # Watch Redis operations
+tail -f bot.log                             # Monitor application logs
+python -c "from services.usage_service import UsageService; import asyncio; print(asyncio.run(UsageService().health_check()))"  # Test services
+```
+
+**🎉 Ready to build something amazing? Start with the [Quick Start](#-quick-start) guide!**

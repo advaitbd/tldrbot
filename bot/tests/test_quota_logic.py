@@ -106,10 +106,14 @@ class TestQuotaLogic:
         user_id = 12345
         chat_id = -67890
         
-        # Mock successful Redis operations
-        with patch.object(usage_service.quota_manager, 'increment_daily_usage', return_value=4), \
-             patch.object(usage_service.quota_manager, 'increment_monthly_usage', return_value=51), \
-             patch.object(usage_service.quota_manager, 'add_user_to_group', return_value=None):
+        # Mock successful Redis operations and ensure user is not premium
+        with patch.object(usage_service.quota_manager, 'increment_counters', return_value={'daily': 4, 'monthly': 51, 'groups': 2}), \
+             patch('services.usage_service.is_premium', return_value=False), \
+             patch('asyncio.get_running_loop') as mock_loop:
+            
+            # Mock the executor for get_or_create_user
+            mock_loop.return_value.run_in_executor.return_value = asyncio.Future()
+            mock_loop.return_value.run_in_executor.return_value.set_result(None)
             
             result = await usage_service.increment_counters(user_id, chat_id)
             
@@ -117,6 +121,7 @@ class TestQuotaLogic:
             assert 'monthly' in result
             assert result['daily'] == 4
             assert result['monthly'] == 51
+            assert result['premium'] is False
     
     @pytest.mark.asyncio
     async def test_redis_error_handling_fail_safe(self, usage_service):

@@ -63,9 +63,10 @@ class TestWebhookHandlers:
         
         sig_header = f"t={timestamp},v1={signature}"
         
-        with patch('config.settings.StripeConfig.WEBHOOK_SECRET', secret):
-            result = stripe_service.verify_webhook_signature(payload, sig_header)
-            assert result is True
+        # Patch the instance attribute directly since it's set in __init__
+        stripe_service.webhook_secret = secret
+        result = stripe_service.verify_webhook_signature(payload, sig_header)
+        assert result is True
     
     def test_webhook_signature_verification_invalid(self, stripe_service):
         """Test that invalid webhook signatures are rejected."""
@@ -74,18 +75,20 @@ class TestWebhookHandlers:
         invalid_signature = "invalid_signature"
         sig_header = f"t=1234567890,v1={invalid_signature}"
         
-        with patch('config.settings.StripeConfig.WEBHOOK_SECRET', secret):
-            result = stripe_service.verify_webhook_signature(payload, sig_header)
-            assert result is False
+        # Patch the instance attribute directly since it's set in __init__
+        stripe_service.webhook_secret = secret
+        result = stripe_service.verify_webhook_signature(payload, sig_header)
+        assert result is False
     
     def test_webhook_signature_verification_missing_secret(self, stripe_service):
         """Test webhook verification when secret is missing."""
         payload = b'{"test": "data"}'  # Use bytes instead of string
         sig_header = "t=1234567890,v1=signature"
         
-        with patch('config.settings.StripeConfig.WEBHOOK_SECRET', None):
-            result = stripe_service.verify_webhook_signature(payload, sig_header)
-            assert result is False
+        # Set webhook secret to None to test missing secret scenario
+        stripe_service.webhook_secret = None
+        result = stripe_service.verify_webhook_signature(payload, sig_header)
+        assert result is False
     
     @pytest.mark.asyncio
     async def test_checkout_session_completed_handler(self, stripe_service, sample_webhook_payload):
@@ -99,10 +102,10 @@ class TestWebhookHandlers:
             'items': Mock(data=[Mock(current_period_end=1234567890)])
         }[key])
         
-        with patch('utils.user_management.get_or_create_user') as mock_get_user, \
-             patch('utils.user_management.update_premium_status', return_value=True) as mock_update_premium, \
+        with patch('services.stripe_service.update_premium_status', return_value=True) as mock_update_premium, \
              patch('stripe.Subscription.retrieve', return_value=mock_subscription), \
              patch.object(stripe_service, '_extract_telegram_id', return_value=telegram_id), \
+             patch.object(stripe_service, '_log_event') as mock_log_event, \
              patch('services.usage_service.UsageService') as mock_usage_service_class:
             
             mock_usage_service = Mock()
@@ -139,8 +142,16 @@ class TestWebhookHandlers:
             }
         }
         
-        with patch('utils.user_management.update_premium_status', return_value=True) as mock_update_premium, \
+        # Mock the subscription retrieval
+        mock_subscription = Mock()
+        mock_subscription.__getitem__ = Mock(side_effect=lambda key: {
+            'items': Mock(data=[Mock(current_period_end=1234567890)])
+        }[key])
+        
+        with patch('services.stripe_service.update_premium_status', return_value=True) as mock_update_premium, \
+             patch('stripe.Subscription.retrieve', return_value=mock_subscription), \
              patch.object(stripe_service, '_get_telegram_id_from_customer', return_value=123456789), \
+             patch.object(stripe_service, '_log_event'), \
              patch('services.usage_service.UsageService') as mock_usage_service_class:
             
             mock_usage_service = Mock()
@@ -175,8 +186,10 @@ class TestWebhookHandlers:
             }
         }
         
-        with patch('utils.user_management.update_premium_status', return_value=True) as mock_update_premium, \
-             patch.object(stripe_service, '_get_telegram_id_from_customer', return_value=123456789):
+        with patch('services.stripe_service.update_premium_status', return_value=True) as mock_update_premium, \
+             patch('stripe.Subscription.retrieve', return_value=Mock()), \
+             patch.object(stripe_service, '_get_telegram_id_from_customer', return_value=123456789), \
+             patch.object(stripe_service, '_log_event'):
             
             result = await stripe_service.handle_subscription_updated(subscription_data)
             
@@ -202,8 +215,9 @@ class TestWebhookHandlers:
             }
         }
         
-        with patch('utils.user_management.update_premium_status', return_value=True) as mock_update_premium, \
-             patch.object(stripe_service, '_get_telegram_id_from_customer', return_value=123456789):
+        with patch('services.stripe_service.update_premium_status', return_value=True) as mock_update_premium, \
+             patch.object(stripe_service, '_get_telegram_id_from_customer', return_value=123456789), \
+             patch.object(stripe_service, '_log_event'):
             
             result = await stripe_service.handle_subscription_deleted(subscription_data)
             
@@ -235,10 +249,14 @@ class TestWebhookHandlers:
         
         mock_subscription = Mock()
         mock_subscription.current_period_end = 1234567890
+        mock_subscription.__getitem__ = Mock(side_effect=lambda key: {
+            'items': Mock(data=[Mock(current_period_end=1234567890)])
+        }[key])
         
         with patch('stripe.Subscription.retrieve', return_value=mock_subscription), \
              patch.object(stripe_service, '_get_telegram_id_from_customer', return_value=123456789), \
-             patch('utils.user_management.update_premium_status') as mock_update_premium:
+             patch.object(stripe_service, '_log_event'), \
+             patch('services.stripe_service.update_premium_status') as mock_update_premium:
             
             result = await stripe_service.handle_subscription_updated(subscription_data)
             
@@ -275,7 +293,7 @@ class TestWebhookHandlers:
         """Test that premium deactivation updates user status."""
         telegram_id = 123456789
         
-        with patch('utils.user_management.update_premium_status', return_value=True) as mock_update_premium:
+        with patch('services.stripe_service.update_premium_status', return_value=True) as mock_update_premium:
             
             result = await stripe_service.deactivate_premium(telegram_id)
             
@@ -292,7 +310,7 @@ class TestWebhookHandlers:
     @pytest.mark.asyncio
     async def test_webhook_error_handling_database_failure(self, stripe_service, sample_webhook_payload):
         """Test webhook error handling when database operations fail."""
-        with patch('utils.user_management.update_premium_status', return_value=False), \
+        with patch('services.stripe_service.update_premium_status', return_value=False), \
              patch.object(stripe_service, '_extract_telegram_id', return_value=123456789), \
              patch('stripe.Subscription.retrieve') as mock_retrieve, \
              patch('logging.Logger.error') as mock_logger:
@@ -312,7 +330,7 @@ class TestWebhookHandlers:
         """Test webhook retry logic for failed operations."""
         # Create a mock request object
         mock_request = Mock()
-        mock_request.body = b'{"type": "test.event", "data": {"object": {}}}'
+        mock_request.body = b'{"type": "checkout.session.completed", "data": {"object": {}}}'
         mock_request.headers = {'Stripe-Signature': 'test_signature'}
         
         # Mock successful signature verification but failed processing
