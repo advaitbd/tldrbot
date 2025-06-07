@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import (
-    create_engine, Column, Integer, BigInteger, String, DateTime, Text
+    create_engine, Column, Integer, BigInteger, String, DateTime, Text, Boolean
 )
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
 
@@ -16,6 +16,16 @@ if not DATABASE_URL:
 Base = declarative_base()
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
+
+class User(Base):
+    """User model for freemium functionality"""
+    __tablename__ = "users"
+
+    telegram_id = Column(BigInteger, primary_key=True)
+    premium = Column(Boolean, default=False, nullable=False)
+    premium_expires_at = Column(DateTime, nullable=True)
+    stripe_customer_id = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 class UserEvent(Base):
     __tablename__ = "user_events"
