@@ -8,6 +8,7 @@ from telegram.ext import (
     MessageHandler,
     InlineQueryHandler,
     ConversationHandler,
+    CallbackQueryHandler,
     filters,
 )
 from telegram import BotCommand
@@ -77,6 +78,12 @@ class Bot:
             application.add_handler(CommandHandler("subscribe", self.command_handlers.upgrade_command))  # Alias
             application.add_handler(CommandHandler("usage", self.command_handlers.usage_command))
             application.add_handler(CommandHandler("cancel_subscription", self.command_handlers.cancel_subscription_command))
+            
+            # Callback handlers for inline buttons
+            application.add_handler(CallbackQueryHandler(
+                self.command_handlers.handle_cancel_subscription_callback,
+                pattern="^cancel_sub_(confirm|abort)_"
+            ))
             
             # Bill splitting conversation (receipt + confirmation)
             split_conv = ConversationHandler(

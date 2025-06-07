@@ -464,7 +464,7 @@ class CommandHandlers:
                 await update.message.reply_text(error_message)
 
     async def cancel_subscription_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle /cancel_subscription command to cancel user's premium subscription."""
+        """Handle /cancel_subscription command - show confirmation dialog first."""
         user = update.effective_user
         chat = update.effective_chat
         
@@ -480,27 +480,114 @@ class CommandHandlers:
         
         if not user or not update.message:
             return
-            
+        
+        # Check if user actually has a premium subscription to cancel
         try:
-            # Call the stripe service to cancel subscription
-            result = await self.stripe_service.cancel_subscription_by_telegram_id(user.id)
-            
-            # Send appropriate response based on result
-            if result["success"]:
+            from utils.user_management import is_premium
+            if not is_premium(user.id):
                 await update.message.reply_text(
-                    f"✅ {result['message']}",
+                    "❌ You don't have an active premium subscription to cancel.",
                     parse_mode="Markdown"
                 )
-            else:
-                await update.message.reply_text(
-                    f"❌ {result['message']}",
-                    parse_mode="Markdown"
-                )
-                
+                return
         except Exception as e:
-            logger.error(f"Error in cancel subscription command for user {user.id}: {e}")
+            logger.error(f"Error checking premium status for user {user.id}: {e}")
             await update.message.reply_text(
-                "Sorry, there was an error processing your cancellation request. Please try again later.",
+                "Sorry, there was an error checking your subscription status. Please try again later.",
+                parse_mode="Markdown"
+            )
+            return
+        
+        # Show confirmation dialog
+        confirmation_message = (
+            "⚠️ *Cancel Premium Subscription?*\n\n"
+            "Are you sure you want to cancel your premium subscription?\n\n"
+            "• You'll keep premium access until the end of your current billing period\n"
+            "• After that, you'll return to the free plan (5 summaries/day)\n"
+            "• You can reactivate anytime before the period ends\n\n"
+            "*This action can be undone before your subscription expires.*"
+        )
+        
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("✅ Yes, Cancel", callback_data=f"cancel_sub_confirm_{user.id}"),
+                InlineKeyboardButton("❌ No, Keep It", callback_data=f"cancel_sub_abort_{user.id}")
+            ]
+        ])
+        
+        await update.message.reply_text(
+            confirmation_message,
+            parse_mode="Markdown",
+            reply_markup=keyboard
+        )
+
+    async def handle_cancel_subscription_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle the confirmation callback for subscription cancellation."""
+        query = update.callback_query
+        if not query or not query.data:
+            return
+        
+        await query.answer()  # Acknowledge the callback
+        
+        user = update.effective_user
+        if not user:
+            return
+        
+        # Parse callback data
+        if query.data.startswith("cancel_sub_confirm_"):
+            user_id_from_callback = query.data.split("_")[-1]
+            
+            # Security check: ensure user can only cancel their own subscription
+            if str(user.id) != user_id_from_callback:
+                await query.edit_message_text(
+                    "❌ You can only cancel your own subscription.",
+                    parse_mode="Markdown"
+                )
+                return
+            
+            # Show processing message
+            await query.edit_message_text(
+                "⏳ Processing cancellation...",
+                parse_mode="Markdown"
+            )
+            
+            try:
+                # Actually cancel the subscription
+                result = await self.stripe_service.cancel_subscription_by_telegram_id(user.id)
+                
+                # Don't send immediate response - let webhook handle the notification
+                if result["success"]:
+                    await query.edit_message_text(
+                        "⏳ Cancellation processed. You'll receive a confirmation shortly.",
+                        parse_mode="Markdown"
+                    )
+                    
+                    # Log successful cancellation
+                    log_user_event(
+                        user_id=user.id,
+                        chat_id=query.message.chat_id if query.message else 0,
+                        event_type="subscription_cancelled_by_user",
+                        username=getattr(user, "username", None),
+                        first_name=getattr(user, "first_name", None),
+                        last_name=getattr(user, "last_name", None),
+                    )
+                else:
+                    await query.edit_message_text(
+                        f"❌ {result['message']}",
+                        parse_mode="Markdown"
+                    )
+                    
+            except Exception as e:
+                logger.error(f"Error cancelling subscription for user {user.id}: {e}")
+                await query.edit_message_text(
+                    "❌ Sorry, there was an error processing your cancellation. Please try again later.",
+                    parse_mode="Markdown"
+                )
+        
+        elif query.data.startswith("cancel_sub_abort_"):
+            # User decided not to cancel
+            await query.edit_message_text(
+                "✅ Subscription cancellation aborted. Your premium subscription remains active.",
                 parse_mode="Markdown"
             )
 
