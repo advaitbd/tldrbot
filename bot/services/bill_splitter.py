@@ -6,24 +6,14 @@ import logging
 from io import BytesIO
 from typing import List, Dict, Any, Tuple, Set, Optional
 
-from openai import OpenAI, OpenAIError
+from openai import OpenAI
 from pydantic import BaseModel, Field, ValidationError
 from telegram import Update
 from telegram.ext import ContextTypes
 
-import os
-import base64
-import json
-import logging
-
 # Import AIService to use for context parsing LLM call
 from services.ai.ai_service import AIService # Assuming this path is correct
-from config.settings import OpenAIConfig # Assuming this path is correct
 
-# Import Mistral OCR client
-from mistralai import Mistral
-
-logger = logging.getLogger(__name__)
 
 logger = logging.getLogger(__name__)
 
@@ -67,66 +57,16 @@ class ContextParsingResult(BaseModel):
 
 # --- AI Extraction Logic ---
 async def extract_receipt_data_from_image(image_bytes: bytes) -> ReceiptData | None:
-    """
-    Uses Mistral OCR API to extract text from the receipt image, then parses it into structured ReceiptData using an LLM.
-    """
-    mistral_api_key = os.getenv("MISTRAL_API_KEY")
-    if not mistral_api_key:
-        logger.error("Mistral API Key is not configured (MISTRAL_API_KEY).")
+    """Use OpenAI GPT-4o to parse the receipt image into ``ReceiptData``."""
+
+    openai_api_key = os.getenv("OPENAI_API_KEY")
+    if not openai_api_key:
+        logger.error("OpenAI API key is not configured (OPENAI_API_KEY).")
         return None
 
-    logger.info("Starting receipt extraction using Mistral OCR.")
-    import tempfile
+    model_name = os.getenv("OPENAI_MODEL", "gpt-4o")
+    client = OpenAI(api_key=openai_api_key)
 
-    try:
-        with Mistral(api_key=mistral_api_key) as mistral:
-            logger.info("Saving image bytes to a temporary file for upload to Mistral.")
-            with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
-                tmp.write(image_bytes)
-                tmp_path = tmp.name
-            logger.info(f"Temporary file created at {tmp_path}")
-
-            logger.info("Uploading file to Mistral for OCR processing...")
-            uploaded_file = mistral.files.upload(
-                file={
-                    "file_name": os.path.basename(tmp_path),
-                    "content": open(tmp_path, "rb"),
-                },
-                purpose="ocr"
-            )
-            logger.info(f"File uploaded to Mistral. File ID: {uploaded_file.id}")
-
-            signed_url = mistral.files.get_signed_url(file_id=uploaded_file.id)
-            logger.info(f"Obtained signed URL for OCR: {signed_url.url}")
-
-            logger.info("Requesting OCR processing from Mistral using signed URL...")
-            res = mistral.ocr.process(
-                model="mistral-ocr-latest",
-                document={
-                    "type": "image_url",
-                    "image_url": signed_url.url,
-                }
-            )
-            logger.info("OCR request sent to Mistral. Awaiting response...")
-
-            # Extract the OCR text from the first page's markdown
-            ocr_text = ""
-            if hasattr(res, "pages") and res.pages:
-                logger.info(f"Mistral OCR returned {len(res.pages)} page(s). Extracting markdown from first page.")
-                ocr_text = res.pages[0].markdown
-                logger.debug(f"OCR Markdown (first 500 chars): {ocr_text[:500]}")
-            else:
-                logger.error("Mistral OCR did not return any pages.")
-                return None
-    except Exception as e:
-        logger.error(f"Mistral OCR error: {e}")
-        return None
-
-    if not ocr_text or not isinstance(ocr_text, str) or not ocr_text.strip():
-        logger.error("Mistral OCR returned empty text.")
-        return None
-
-    # Step 2: Use LLM to parse OCR text into ReceiptData structure
     try:
         schema_dict = ReceiptData.model_json_schema()
         schema_json_string = json.dumps(schema_dict, indent=2)
@@ -134,54 +74,54 @@ async def extract_receipt_data_from_image(image_bytes: bytes) -> ReceiptData | N
         logger.error(f"Failed to generate schema for ReceiptData: {e}")
         return None
 
-    logger.info("Parsing OCR text to structured ReceiptData using LLM (deepseek strategy).")
-    # Use OpenAI or another LLM to structure the OCR text (reuse existing LLM logic)
+    prompt = (
+        "Extract structured data from the following receipt image. "
+        "Respond with a JSON object matching this Pydantic schema:\n"
+        f"{schema_json_string}\n\n"
+        "Key Extraction Points:\n"
+        "- `items`: include name, quantity, unitPrice and totalPrice for each line item.\n"
+        "- `totalAmount`: the final amount paid.\n"
+        "- `serviceCharge`: value of any service charge line item, if present.\n"
+        "- `taxAmount`: value of any tax line item, if present.\n"
+        "- Identify `merchant` name and `date` if available.\n"
+        "Respond ONLY with the JSON object."
+    )
+
+    logger.info(f"Sending receipt image to OpenAI model {model_name} for parsing...")
+    base64_image = base64.b64encode(image_bytes).decode("utf-8")
+
     try:
-        from services.ai import StrategyRegistry
-        from services.ai.ai_service import AIService
-        ai_service = AIService(StrategyRegistry.get_strategy("deepseek"))
-
-        prompt = (
-            f"The following is the raw OCR text from a receipt image:\n"
-            f"--- OCR TEXT START ---\n"
-            f"{ocr_text}\n"
-            f"--- OCR TEXT END ---\n\n"
-            f"Extract structured data from the above OCR text. Provide the response as a JSON object "
-            f"matching the following Pydantic model schema:\n"
-            f"{schema_json_string}\n\n"
-            f"Key Extraction Points:\n"
-            f"- 'items': Ensure this list includes name, quantity, unitPrice, and totalPrice for each line item. "
-            f"Calculate totalPrice (quantity * unitPrice) if not explicitly present per item.\n"
-            f"- 'totalAmount': This MUST be the final, total amount paid as shown on the receipt.\n"
-            f"- 'serviceCharge': If a separate line item for service charge exists, extract its value here. "
-            f"If not present, omit this field or set to null.\n"
-            f"- 'taxAmount': If a separate line item for tax (like GST, VAT, Sales Tax) exists, extract its value here. "
-            f"Sum multiple taxes if necessary into this single field. If no explicit tax line item is present, omit this field or set to null. "
-            f"It's important to distinguish tax from service charge.\n"
-            f"- Identify 'merchant' name and 'date' if available.\n"
-            f"Respond ONLY with the JSON object, no explanation."
+        response = client.chat.completions.create(
+            model=model_name,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}},
+                    ],
+                }
+            ],
         )
+        llm_response_str = response.choices[0].message.content
+    except Exception as e:
+        logger.error(f"OpenAI OCR error: {e}")
+        return None
 
-        logger.debug(f"Sending prompt to LLM for structuring OCR text (first 500 chars of OCR text): {ocr_text[:500]}")
-        llm_response = ai_service.get_response(prompt)
-        logger.info("Received response from LLM for OCR structuring.")
+    if not llm_response_str:
+        logger.error("OpenAI OCR returned empty text.")
+        return None
 
-        # Remove markdown code block if present
-        llm_response_str = llm_response
-        if llm_response_str is not None:
-            llm_response_str = llm_response_str.strip()
-            if llm_response_str.startswith("```json"):
-                llm_response_str = llm_response_str[7:-3].strip()
-            elif llm_response_str.startswith("```"):
-                llm_response_str = llm_response_str[3:-3].strip()
-        else:
-            logger.error("LLM response is None.")
-            return None
+    try:
+        processed_response = llm_response_str.strip()
+        if processed_response.startswith("```json"):
+            processed_response = processed_response[7:-3].strip()
+        elif processed_response.startswith("```"):
+            processed_response = processed_response[3:-3].strip()
 
-        extracted_json = json.loads(llm_response_str)
-        logger.info(f"Raw JSON extracted from LLM: {json.dumps(extracted_json, indent=2)}")
+        extracted_json = json.loads(processed_response)
+        logger.info(f"Raw JSON extracted from OpenAI OCR: {json.dumps(extracted_json, indent=2)}")
 
-        # Validate and parse the JSON data using Pydantic
         receipt_data = ReceiptData.model_validate(extracted_json)
         logger.info("Successfully parsed ReceiptData from OCR text.")
         return receipt_data

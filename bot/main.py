@@ -75,6 +75,10 @@ class Bot:
                                        self.command_handlers.split_bill_confirm),
                         MessageHandler(filters.Regex("(?i)^(cancel|no)$"),
                                        self.command_handlers.split_bill_cancel),
+                        MessageHandler(
+                            filters.PHOTO & filters.Caption(),
+                            self.command_handlers.split_bill_photo_with_context,
+                        ),
                     ],
                 },
                 fallbacks=[CommandHandler("cancel", self.command_handlers.split_bill_cancel)],

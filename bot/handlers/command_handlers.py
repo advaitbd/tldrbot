@@ -5,6 +5,7 @@ from telegram.ext import (
     ContextTypes, ConversationHandler, CommandHandler as TelegramCommandHandler, # Rename to avoid clash
     MessageHandler, filters
 )
+import os
 from services.ai import StrategyRegistry
 from utils.memory_storage import MemoryStorage
 from services.ai.ai_service import AIService
@@ -375,6 +376,9 @@ class CommandHandlers:
                 "(Make sure item names in your caption roughly match the receipt.)",
                 parse_mode="Markdown"
             )
+            await update.message.reply_text(
+                f"Using OpenAI model {os.getenv('OPENAI_MODEL', 'gpt-4o')} for receipt parsing."
+            )
         else:
             # Fallback: send message to chat if possible
             if update.effective_chat:
@@ -389,6 +393,10 @@ class CommandHandlers:
                         "(Make sure item names in your caption roughly match the receipt.)"
                     ),
                     parse_mode="Markdown"
+                )
+                await context.bot.send_message(
+                    chat_id=update.effective_chat.id,
+                    text=f"Using OpenAI model {os.getenv('OPENAI_MODEL', 'gpt-4o')} for receipt parsing."
                 )
         return RECEIPT_IMAGE
 
@@ -418,12 +426,13 @@ class CommandHandlers:
         user_context_text = message.caption
 
         # Defensive: reply in the right place
+        model_name = os.getenv('OPENAI_MODEL', 'gpt-4o')
         if hasattr(message, "reply_text"):
-            await message.reply_text("Processing receipt and context...")
+            await message.reply_text(f"Processing receipt and context using {model_name}...")
         elif update.effective_chat:
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
-                text="Processing receipt and context..."
+                text=f"Processing receipt and context using {model_name}..."
             )
 
         # 2. Extract receipt data
@@ -489,7 +498,7 @@ class CommandHandlers:
         if participants:
             parts = ", ".join(participants)
             lines.append(f"Participants: {parts}")
-        lines.append("\nPlease reply with 'confirm' to finalize the split, or /cancel to abort.")
+        lines.append("\nPlease reply with 'confirm' to finalize the split, send a new photo with caption to retry, or /cancel to abort.")
 
         # Defensive: reply in the right place
         if hasattr(message, "reply_text"):

@@ -58,7 +58,7 @@ A powerful Telegram bot that enhances group productivity through AI-powered conv
 
 5. **Bill Splitting System**
    - **Receipt Processing Pipeline**:
-     - OCR using Mistral AI for text extraction
+     - OCR using OpenAI GPT-4o for text extraction
      - AI-powered receipt data structuring
      - Pydantic models for data validation
 
@@ -111,14 +111,13 @@ A powerful Telegram bot that enhances group productivity through AI-powered conv
 
    # Optional (based on AI models you want to use)
    OPENAI_API_KEY=your_openai_key
-   OPENAI_MODEL=gpt-4o-mini  # Optional, defaults to gpt-4o-mini
+   OPENAI_MODEL=gpt-4o  # Optional, defaults to gpt-4o
    GROQ_API_KEY=your_groq_key
    GROQ_MODEL=llama3-8b-8192  # Optional, defaults to llama3-8b-8192
    DEEPSEEK_API_KEY=your_deepseek_key
    DEEPSEEK_MODEL=deepseek-chat  # Optional, defaults to deepseek-chat
 
-   # Required
-   MISTRAL_API_KEY=your_mistral_key # For OCR in the bill splitting feature
+   # Optional
 
    # Optional (for webhook deployment)
    WEBHOOK_URL=your_webhook_url
@@ -157,7 +156,7 @@ A powerful Telegram bot that enhances group productivity through AI-powered conv
 
 ### Model Switching
 Available models:
-- `openai` - OpenAI's GPT models (default: gpt-4o-mini)
+- `openai` - OpenAI's GPT models (default: gpt-4o)
 - `groq` - Groq's Llama 3 (default: llama3-8b-8192)
 - `deepseek` - DeepSeek models (default: deepseek-chat)
 
@@ -308,7 +307,6 @@ BOT_TOKEN=your_telegram_bot_token
 OPENAI_API_KEY=your_openai_key
 GROQ_API_KEY=your_groq_key
 DEEPSEEK_API_KEY=your_deepseek_key
-MISTRAL_API_KEY=your_mistral_key
 WEBHOOK_URL=your_webhook_url
 PORT=your_port
 REDIS_URL=redis://<host>:<port>/<db>
