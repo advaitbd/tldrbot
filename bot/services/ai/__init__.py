@@ -25,7 +25,8 @@ class StrategyRegistry:
 
 # Register strategies with their respective API keys and models
 api_key = OpenAIConfig.API_KEY or ""
-model = OpenAIConfig.MODEL or ""
-StrategyRegistry.register_strategy("openai", OpenAIStrategy(api_key, model))
+StrategyRegistry.register_strategy("openai-mini", OpenAIStrategy(api_key, OpenAIConfig.MINI_MODEL))
+StrategyRegistry.register_strategy("openai-4o", OpenAIStrategy(api_key, OpenAIConfig.O4_MODEL))
+StrategyRegistry.register_strategy("openai-4.1", OpenAIStrategy(api_key, OpenAIConfig.FOUR_ONE_MODEL))
 StrategyRegistry.register_strategy("groq", GroqAIStrategy(GroqAIConfig.API_KEY or "", GroqAIConfig.MODEL or ""))
 StrategyRegistry.register_strategy("deepseek", DeepSeekStrategy(DeepSeekAIConfig.API_KEY or "", DeepSeekAIConfig.MODEL or ""))

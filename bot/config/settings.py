@@ -18,7 +18,9 @@ class TelegramConfig:
 @dataclass
 class OpenAIConfig:
     API_KEY: str | None = os.environ.get("OPENAI_API_KEY")
-    MODEL: str | None = os.environ.get("OPENAI_MODEL", "gpt-4o")
+    MINI_MODEL: str = os.environ.get("OPENAI_MINI_MODEL", "gpt-4o-mini")
+    O4_MODEL: str = os.environ.get("OPENAI_4O_MODEL", "gpt-4o")
+    FOUR_ONE_MODEL: str = os.environ.get("OPENAI_41_MODEL", "gpt-4-turbo")
 
 @dataclass
 class GroqAIConfig:
