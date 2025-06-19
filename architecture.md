@@ -129,7 +129,7 @@ classDiagram
 
 - **Receipt Processing Pipeline**:
     - Receives image uploads.
-    - Uses OCR (Mistral or AI) to extract text.
+    - Uses OCR (OpenAI GPT-4o) to extract text.
     - Parses payment context using LLM.
     - Calculates and formats split results.
 - Interactive confirmation flow with users.
