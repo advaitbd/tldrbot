@@ -18,6 +18,12 @@ from services.ai.openai_strategy import OpenAIStrategy
 from services.ai.groq_strategy import GroqAIStrategy
 from services.ai.deepseek_strategy import DeepSeekStrategy
 
+# Allowed OpenAI models for receipt parsing
+ALLOWED_RECEIPT_MODELS = [
+    OpenAIConfig.MINI_MODEL,
+    OpenAIConfig.O4_MODEL,
+    OpenAIConfig.FOUR_ONE_MODEL,
+]
 # Import the new bill splitting service functions
 from services.bill_splitter import (
     extract_receipt_data_from_image,
@@ -44,6 +50,7 @@ class CommandHandlers:
             self.redis_queue = RedisQueue()
         # Optionally: track per-user model selection in memory
         self.user_selected_model = {}  # {user_id: provider_name}
+        self.user_receipt_model = {}  # {user_id: openai_model_name}
 
     async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         # --- Analytics logging ---
@@ -73,8 +80,11 @@ class CommandHandlers:
             "• `/clear_api_key <provider>` — Remove your API key for a provider\n"
             "    Valid providers: `openai`, `groq`, `deepseek`\n"
             "• `/list_providers` — List all valid provider names\n"
+            "• `/set_receipt_model <model>` — Choose OpenAI model for receipt parsing\n"
             "\n*Available Models:*\n"
-            "• `openai` — OpenAI GPT models\n"
+            "• `openai-mini` — GPT-4o mini\n"
+            "• `openai-4o` — GPT-4o\n"
+            "• `openai-4.1` — GPT-4.1 (turbo)\n"
             "• `groq` — Uses Llama 3 (8bn) hosted by groq\n"
             "• `deepseek` — DeepSeek V3\n"
             "\n*Features:*\n"
@@ -96,7 +106,9 @@ class CommandHandlers:
             user_id,
             provider,
             {
-                "openai": (OpenAIConfig, OpenAIStrategy),
+                "openai-mini": (OpenAIConfig, OpenAIStrategy, OpenAIConfig.MINI_MODEL),
+                "openai-4o": (OpenAIConfig, OpenAIStrategy, OpenAIConfig.O4_MODEL),
+                "openai-4.1": (OpenAIConfig, OpenAIStrategy, OpenAIConfig.FOUR_ONE_MODEL),
                 "groq": (GroqAIConfig, GroqAIStrategy),
                 "deepseek": (DeepSeekAIConfig, DeepSeekStrategy),
             },
@@ -107,10 +119,18 @@ class CommandHandlers:
         if provider not in config_map:
             raise ValueError(f"Unknown provider: {provider}")
 
-        config_class, strategy_class = config_map[provider]
-        user_key = get_user_api_key(user_id, provider)
-        key = user_key if user_key is not None else (config_class.API_KEY if config_class.API_KEY is not None else "")
-        model = config_class.MODEL if config_class.MODEL is not None else ""
+        mapping = config_map[provider]
+        if len(mapping) == 3:
+            config_class, strategy_class, model = mapping
+        else:
+            config_class, strategy_class = mapping
+            model = getattr(config_class, 'MODEL', '')
+
+        # Use a shared key for all OpenAI models
+        key_provider = 'openai' if provider.startswith('openai') else provider
+        user_key = get_user_api_key(user_id, key_provider)
+        key = user_key if user_key is not None else (config_class.API_KEY if getattr(config_class, 'API_KEY', None) is not None else "")
+
         return strategy_class(key, model)
     def _get_user_selected_model(self, user_id: int):
         """Get the user's selected model/provider, or default to 'deepseek'."""
@@ -291,6 +311,28 @@ class CommandHandlers:
         else:
             logger.warning("No message found in update for list_providers.")
 
+    async def set_receipt_model(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Allow user to choose which OpenAI model is used for receipt parsing."""
+        user = update.effective_user
+        if user is None or update.message is None:
+            return
+
+        if not context.args or len(context.args) != 1:
+            await update.message.reply_text(
+                f"Usage: /set_receipt_model <model>\nAvailable: {', '.join(ALLOWED_RECEIPT_MODELS)}"
+            )
+            return
+
+        model_name = context.args[0]
+        if model_name not in ALLOWED_RECEIPT_MODELS:
+            await update.message.reply_text(
+                f"Invalid model name. Choose from: {', '.join(ALLOWED_RECEIPT_MODELS)}"
+            )
+            return
+
+        self.user_receipt_model[user.id] = model_name
+        await update.message.reply_text(f"Receipt parsing model set to {model_name}.")
+
     async def inline_query(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle inline queries."""
         if not hasattr(update, "inline_query") or update.inline_query is None:
@@ -377,7 +419,7 @@ class CommandHandlers:
                 parse_mode="Markdown"
             )
             await update.message.reply_text(
-                f"Using OpenAI model {os.getenv('OPENAI_MODEL', 'gpt-4o')} for receipt parsing."
+                f"Using OpenAI model {self.user_receipt_model.get(user.id if user is not None else 0, os.getenv('OPENAI_MODEL', OpenAIConfig.MINI_MODEL))} for receipt parsing."
             )
         else:
             # Fallback: send message to chat if possible
@@ -396,7 +438,7 @@ class CommandHandlers:
                 )
                 await context.bot.send_message(
                     chat_id=update.effective_chat.id,
-                    text=f"Using OpenAI model {os.getenv('OPENAI_MODEL', 'gpt-4o')} for receipt parsing."
+                    text=f"Using OpenAI model {self.user_receipt_model.get(user.id if user is not None else 0, os.getenv('OPENAI_MODEL', OpenAIConfig.MINI_MODEL))} for receipt parsing."
                 )
         return RECEIPT_IMAGE
 
@@ -426,7 +468,8 @@ class CommandHandlers:
         user_context_text = message.caption
 
         # Defensive: reply in the right place
-        model_name = os.getenv('OPENAI_MODEL', 'gpt-4o')
+        model_name = self.user_receipt_model.get(user.id if user is not None else 0,
+                                                os.getenv('OPENAI_MODEL', OpenAIConfig.MINI_MODEL))
         if hasattr(message, "reply_text"):
             await message.reply_text(f"Processing receipt and context using {model_name}...")
         elif update.effective_chat:
@@ -436,7 +479,7 @@ class CommandHandlers:
             )
 
         # 2. Extract receipt data
-        receipt_data = await extract_receipt_data_from_image(image_bytes)
+        receipt_data = await extract_receipt_data_from_image(image_bytes, model_name)
         if not receipt_data:
             if hasattr(message, "reply_text"):
                 await message.reply_text(

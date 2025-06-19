@@ -64,6 +64,7 @@ class Bot:
             application.add_handler(CommandHandler("set_api_key", self.command_handlers.set_api_key))
             application.add_handler(CommandHandler("clear_api_key", self.command_handlers.clear_api_key))
             application.add_handler(CommandHandler("list_providers", self.command_handlers.list_providers))
+            application.add_handler(CommandHandler("set_receipt_model", self.command_handlers.set_receipt_model))
             # Bill splitting conversation (receipt + confirmation)
             split_conv = ConversationHandler(
                 entry_points=[CommandHandler("splitbill", self.command_handlers.split_bill_start)],
@@ -111,6 +112,7 @@ class Bot:
             BotCommand("set_api_key", "Set your own API key for a provider"),
             BotCommand("clear_api_key", "Remove your API key for a provider"),
             BotCommand("list_providers", "List all valid provider names"),
+            BotCommand("set_receipt_model", "Choose OpenAI model for receipts"),
             BotCommand("cancel", "Cancel current operation (like bill split)"),
         ]
         await application.bot.set_my_commands(commands)

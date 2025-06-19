@@ -111,7 +111,9 @@ A powerful Telegram bot that enhances group productivity through AI-powered conv
 
    # Optional (based on AI models you want to use)
    OPENAI_API_KEY=your_openai_key
-   OPENAI_MODEL=gpt-4o  # Optional, defaults to gpt-4o
+   OPENAI_MINI_MODEL=gpt-4o-mini  # Optional, defaults to gpt-4o-mini
+   OPENAI_4O_MODEL=gpt-4o        # Optional
+   OPENAI_41_MODEL=gpt-4-turbo   # Optional
    GROQ_API_KEY=your_groq_key
    GROQ_MODEL=llama3-8b-8192  # Optional, defaults to llama3-8b-8192
    DEEPSEEK_API_KEY=your_deepseek_key
@@ -156,7 +158,9 @@ A powerful Telegram bot that enhances group productivity through AI-powered conv
 
 ### Model Switching
 Available models:
-- `openai` - OpenAI's GPT models (default: gpt-4o)
+- `openai-mini` - GPT-4o mini (default)
+- `openai-4o` - GPT-4o
+- `openai-4.1` - GPT-4.1 (turbo)
 - `groq` - Groq's Llama 3 (default: llama3-8b-8192)
 - `deepseek` - DeepSeek models (default: deepseek-chat)
 

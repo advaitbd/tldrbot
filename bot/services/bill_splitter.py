@@ -56,15 +56,16 @@ class ContextParsingResult(BaseModel):
 
 
 # --- AI Extraction Logic ---
-async def extract_receipt_data_from_image(image_bytes: bytes) -> ReceiptData | None:
-    """Use OpenAI GPT-4o to parse the receipt image into ``ReceiptData``."""
+async def extract_receipt_data_from_image(image_bytes: bytes, model_name: str | None = None) -> ReceiptData | None:
+    """Use OpenAI to parse the receipt image into ``ReceiptData``."""
 
     openai_api_key = os.getenv("OPENAI_API_KEY")
     if not openai_api_key:
         logger.error("OpenAI API key is not configured (OPENAI_API_KEY).")
         return None
 
-    model_name = os.getenv("OPENAI_MODEL", "gpt-4o")
+    if model_name is None:
+        model_name = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
     client = OpenAI(api_key=openai_api_key)
 
     try:
