@@ -113,7 +113,7 @@ A powerful Telegram bot that enhances group productivity through AI-powered conv
    OPENAI_API_KEY=your_openai_key
    OPENAI_MINI_MODEL=gpt-4o-mini  # Optional, defaults to gpt-4o-mini
    OPENAI_4O_MODEL=gpt-4o        # Optional
-   OPENAI_41_MODEL=gpt-4-turbo   # Optional
+   OPENAI_41_MODEL=gpt-4.1       # Optional
    GROQ_API_KEY=your_groq_key
    GROQ_MODEL=llama3-8b-8192  # Optional, defaults to llama3-8b-8192
    DEEPSEEK_API_KEY=your_deepseek_key
