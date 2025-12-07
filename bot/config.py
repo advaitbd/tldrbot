@@ -1,8 +1,5 @@
 """Configuration for TLDRBot."""
 import os
-from dotenv import load_dotenv
-
-load_dotenv()
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
