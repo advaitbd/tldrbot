@@ -1,5 +1,5 @@
 # Core dependencies
-python-telegram-bot>=21.0
+python-telegram-bot[webhooks]>=21.0
 openai>=1.0
 yt-dlp>=2024.0
 

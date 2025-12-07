@@ -53,10 +53,20 @@ class AutoDownloadPlugin(Plugin):
             self.check_for_urls
         ), group=2)
         app.post_init = self._start_worker
+        app.post_shutdown = self._stop_worker
     
     async def _start_worker(self, app: Application) -> None:
         self._worker_task = asyncio.create_task(self._download_worker(app))
         logger.info("Download worker started")
+    
+    async def _stop_worker(self, app: Application) -> None:
+        if self._worker_task:
+            self._worker_task.cancel()
+            try:
+                await self._worker_task
+            except asyncio.CancelledError:
+                pass
+            logger.info("Download worker stopped")
     
     def _extract_video_url(self, text: str) -> str | None:
         url_pattern = r'https?://[^\s<>"{}|\\^`\[\]]+'
