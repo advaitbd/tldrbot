@@ -1,5 +1,6 @@
 """Configuration for TLDRBot."""
 import os
+import json
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
@@ -15,7 +16,7 @@ def validate_config():
     if missing:
         raise ValueError(f"Missing: {', '.join(missing)}")
 
-VIDEO_URL_PATTERNS = [
+_DEFAULT_VIDEO_URL_PATTERNS = [
     r'https?://(www\.)?tiktok\.com/',
     r'https?://(www\.)?vt.tiktok\.com/', 
     r'https?://vm\.tiktok\.com/',
@@ -23,4 +24,15 @@ VIDEO_URL_PATTERNS = [
     r'https?://(www\.)?youtube\.com/shorts/',
     r'https?://youtu\.be/',
 ]
+
+_video_patterns_env = os.environ.get("VIDEO_URL_PATTERNS")
+if _video_patterns_env:
+    try:
+        VIDEO_URL_PATTERNS = json.loads(_video_patterns_env)
+        if not isinstance(VIDEO_URL_PATTERNS, list):
+            raise ValueError("VIDEO_URL_PATTERNS must be a JSON array")
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid JSON in VIDEO_URL_PATTERNS environment variable: {e}")
+else:
+    VIDEO_URL_PATTERNS = _DEFAULT_VIDEO_URL_PATTERNS
 
